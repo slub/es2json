@@ -20,5 +20,8 @@ setup(name='es2json',
           'argparse>=1.4.0',
           'elasticsearch>=5.0.0'
       ],
-      python_requires=">=3.6.*"
+      python_requires=">=3.6.*",
+      entry_points={
+          "console_scripts": ["es2json=es2json.es2json:run"]
+          }
       )
