@@ -9,6 +9,30 @@ import os
 from httplib2 import Http  # needed for put_dict
 
 
+def isint(num):
+    try:
+        int(num)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def isfloat(num):
+    try:
+        float(num)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def isiter(obj):
+    try:
+        _ = (e for e in obj)
+        return True
+    except TypeError:
+        return False
+
+
 def put_dict(url, dictionary):
     """
     Pass the whole dictionary as a json body to the url.
@@ -24,12 +48,6 @@ def put_dict(url, dictionary):
 
 
 def ArrayOrSingleValue(array):
-    """
-    checks whether an array contains and single element
-    returns just the single element if so
-    returns the array if more than one element is contained
-    returns atomar elements
-    """
     if isinstance(array, (int, float)):
         return array
     if array:
@@ -44,16 +62,10 @@ def ArrayOrSingleValue(array):
 
 
 def eprint(*args, **kwargs):
-    """
-    print to sys.stderr
-    """
     print(*args, file=sys.stderr, **kwargs)
 
 
 def eprintjs(*args, **kwargs):
-    """
-    pretty-print json to sys.stderr
-    """
     for arg in args:
         print(json.dumps(arg, indent=4), file=sys.stderr, **kwargs)
 
@@ -164,53 +176,56 @@ def esgenerator(host=None, port=9200, index=None, type=None, id=None, body=None,
 
 
 def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, source=True, source_exclude=None, source_include=None, idfile=None, headless=False, chunksize=1000, timeout=10):
-    if os.path.isfile(idfile):
-        if not source:
-            source = True
-        tracer = logging.getLogger('elasticsearch')
-        tracer.setLevel(logging.WARNING)
-        tracer.addHandler(logging.FileHandler('errors.txt'))
-        es = elasticsearch.Elasticsearch(
-            [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
-        ids = set()
+    if not source:
+        source = True
+    tracer = logging.getLogger('elasticsearch')
+    tracer.setLevel(logging.WARNING)
+    tracer.addHandler(logging.FileHandler('errors.txt'))
+    es = elasticsearch.Elasticsearch(
+        [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
+    ids = set()
 
+    if isinstance(idfile, str) and os.path.isfile(idfile):
         with open(idfile, "r") as inp:
             for ppn in inp:
                 _id = ppn.rstrip()
                 ids.add(_id)
-                if len(ids) >= chunksize:
-                    if body and "query" in body and "match" in body["query"]:
-                        searchbody = {
-                            "query": {"bool": {"must": [{"match": body["query"]["match"]}, {}]}}}
-                        for _id in ids:
-                            searchbody["query"]["bool"]["must"][1] = {
-                                "match": {"_id": _id}}
-                            # eprint(json.dumps(searchbody))
-                            for doc in esgenerator(host=host, port=port, index=index, type=type, body=searchbody, source=source, source_exclude=source_exclude, source_include=source_include, headless=False, timeout=timeout, verbose=False):
-                                if headless:
-                                    yield doc.get("_source")
-                                else:
-                                    yield doc
-                        ids.clear()
+    elif isiter(idfile) and not isinstance(idfile, str) and not os.path.isfile(idfile):
+        for ppn in idfile:
+            ids.add(ppn.rstrip())
+    if len(ids) >= chunksize:
+        if body and "query" in body and "match" in body["query"]:
+            searchbody = {
+                "query": {"bool": {"must": [{"match": body["query"]["match"]}, {}]}}}
+            for _id in ids:
+                searchbody["query"]["bool"]["must"][1] = {
+                    "match": {"_id": _id}}
+                # eprint(json.dumps(searchbody))
+                for doc in esgenerator(host=host, port=port, index=index, type=type, body=searchbody, source=source, source_exclude=source_exclude, source_include=source_include, headless=False, timeout=timeout, verbose=False):
+                    if headless:
+                        yield doc.get("_source")
                     else:
-                        searchbody = {'ids': list(ids)}
-                        try:
-                            if elasticsearch.VERSION < (7, 0, 0):
-                                for doc in es.mget(index=index, doc_type=type, body=searchbody, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
-                                    if headless:
-                                        yield doc.get("_source")
-                                    else:
-                                        yield doc
-                            # no doc_type and slightly different _source parameters in elasticsearch7
-                            elif elasticsearch.VERSION >= (7, 0, 0):
-                                for doc in es.mget(index=index, body=searchbody, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
-                                    if headless:
-                                        yield doc.get("_source")
-                                    else:
-                                        yield doc
-                            ids.clear()
-                        except elasticsearch.exceptions.NotFoundError:
-                            continue
+                        yield doc
+            ids.clear()
+        else:
+            searchbody = {'ids': list(ids)}
+            try:
+                if elasticsearch.VERSION < (7, 0, 0):
+                    for doc in es.mget(index=index, doc_type=type, body=searchbody, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
+                        if headless:
+                            yield doc.get("_source")
+                        else:
+                            yield doc
+                # no doc_type and slightly different _source parameters in elasticsearch7
+                elif elasticsearch.VERSION >= (7, 0, 0):
+                    for doc in es.mget(index=index, body=searchbody, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
+                        if headless:
+                            yield doc.get("_source")
+                        else:
+                            yield doc
+                ids.clear()
+            except elasticsearch.exceptions.NotFoundError:
+                continue
         if len(ids) > 0:
             if body and "query" in body and "match" in body["query"]:
                 searchbody = {
@@ -257,8 +272,7 @@ def esidfileconsumegenerator(host=None, port=9200, index=None, type=None, body=N
         notfound_ids = set()
         with open(idfile, "r") as inp:
             for ppn in inp:
-                _id = ppn.rstrip()
-                ids.append(_id)
+                ids.append(ppn.rstrip())
         if not source:
             source = True
         tracer = logging.getLogger('elasticsearch')
@@ -338,30 +352,6 @@ def litter(lst, elm):
             return lst
         else:
             return lst
-
-
-def isint(num):
-    try:
-        int(num)
-        return True
-    except (ValueError, TypeError):
-        return False
-
-
-def isfloat(num):
-    try:
-        float(num)
-        return True
-    except (ValueError, TypeError):
-        return False
-
-
-def isiter(obj):
-    try:
-        _ = (e for e in obj)
-        return True
-    except TypeError:
-        return False
 
 
 def run():
