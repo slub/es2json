@@ -18,7 +18,8 @@ setup(name='es2json',
       package_dir={'es2json': 'es2json'},
       install_requires=[
           'argparse>=1.4.0',
-          'elasticsearch>=5.0.0'
+          'elasticsearch>=5.0.0',
+          'httplib2>=0.17.0'
       ],
       python_requires=">=3.6.*",
       entry_points={
