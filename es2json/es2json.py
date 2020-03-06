@@ -33,6 +33,13 @@ def isiter(obj):
         return False
 
 
+def isfile(path):
+    try:
+        return os.path.isfile(path)
+    except TypeError:
+        return False
+
+
 def put_dict(url, dictionary):
     """
     Pass the whole dictionary as a json body to the url.
@@ -70,7 +77,7 @@ def eprintjs(*args, **kwargs):
         print(json.dumps(arg, indent=4), file=sys.stderr, **kwargs)
 
 
-def esfatgenerator(host=None, port=9200, index=None, type=None, body=None, source=True, source_exclude=None, source_include=None, timeout=10):
+def esfatgenerator(host=None, port=9200, index=None, type=None, chunksize=1000, body=None, source=True, source_exclude=None, source_include=None, timeout=10):
     if not source:
         source = True
     es = elasticsearch.Elasticsearch([{'host': host}], port=port)
@@ -80,7 +87,7 @@ def esfatgenerator(host=None, port=9200, index=None, type=None, body=None, sourc
                 index=index,
                 doc_type=type,
                 scroll='12h',
-                size=1000,
+                size=chunksize,
                 body=body,
                 _source=source,
                 _source_exclude=source_exclude,
@@ -90,7 +97,7 @@ def esfatgenerator(host=None, port=9200, index=None, type=None, body=None, sourc
             page = es.search(
                 index=index,
                 scroll='12h',
-                size=1000,
+                size=chunksize,
                 body=body,
                 _source=source,
                 _source_excludes=source_exclude,
@@ -113,8 +120,8 @@ def esfatgenerator(host=None, port=9200, index=None, type=None, body=None, sourc
 #
 
 
-def esgenerator(host=None, port=9200, index=None, type=None, id=None, body=None, source=True, source_exclude=None, source_include=None, headless=False, timeout=10, verbose=False):
-    progress = 1000
+def esgenerator(host=None, port=9200, index=None, type=None, id=None, chunksize=1000, body=None, source=True, source_exclude=None, source_include=None, headless=False, timeout=10, verbose=False):
+    progress = chunksize
     if not source:
         source = True
     es = elasticsearch.Elasticsearch(
@@ -135,7 +142,7 @@ def esgenerator(host=None, port=9200, index=None, type=None, id=None, body=None,
                 index=index,
                 doc_type=type,
                 scroll='12h',
-                size=1000,
+                size=chunksize,
                 body=body,
                 _source=source,
                 _source_exclude=source_exclude,
@@ -145,7 +152,7 @@ def esgenerator(host=None, port=9200, index=None, type=None, id=None, body=None,
             page = es.search(
                 index=index,
                 scroll='12h',
-                size=1000,
+                size=chunksize,
                 body=body,
                 _source=source,
                 _source_excludes=source_exclude,
@@ -167,7 +174,7 @@ def esgenerator(host=None, port=9200, index=None, type=None, id=None, body=None,
         scroll_size = len(pages['hits']['hits'])
         if verbose:
             eprint("{}/{}".format(progress, pages['hits']['total']))
-            progress += 1000
+            progress += chunksize
         for hits in pages['hits']['hits']:
             if headless:
                 yield hits['_source']
@@ -185,12 +192,12 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
         [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
     ids = set()
 
-    if isinstance(idfile, str) and os.path.isfile(idfile):
+    if isinstance(idfile, str) and isfile(idfile):
         with open(idfile, "r") as inp:
             for ppn in inp:
                 _id = ppn.rstrip()
                 ids.add(_id)
-    elif isiter(idfile) and not isinstance(idfile, str) and not os.path.isfile(idfile):
+    elif isiter(idfile) and not isinstance(idfile, str) and not isfile(idfile):
         for ppn in idfile:
             ids.add(ppn.rstrip())
     if len(ids) >= chunksize:
@@ -224,8 +231,8 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
                         else:
                             yield doc
                 ids.clear()
-            except elasticsearch.exceptions.NotFoundError:
-                continue
+            except elasticsearch.exceptions.NotFoundError as e:
+                traceback.print_exc()
         if len(ids) > 0:
             if body and "query" in body and "match" in body["query"]:
                 searchbody = {
@@ -267,7 +274,7 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
 
 
 def esidfileconsumegenerator(host=None, port=9200, index=None, type=None, body=None, source=True, source_exclude=None, source_include=None, idfile=None, headless=False, chunksize=1000, timeout=10):
-    if os.path.isfile(idfile):
+    if isfile(idfile):
         ids = list()
         notfound_ids = set()
         with open(idfile, "r") as inp:
@@ -383,6 +390,8 @@ def run():
                         help="path to a file with newline-delimited IDs to process")
     parser.add_argument('-pretty', action="store_true",
                         default=False, help="prettyprint")
+    parser.add_argument('-chunksize', type=int, default=1000, help=
+                        "chunksize of the search window to use")
     args = parser.parse_args()
     if args.server:
         slashsplit = args.server.split("/")
