@@ -412,13 +412,13 @@ def run():
     else:
         tabbing = None
     if args.idfile:
-        for json_record in esidfilegenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, idfile=args.idfile):
+        for json_record in esidfilegenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, idfile=args.idfile, chunksize=args.chunksize):
             sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
     elif args.idfile_consume:
-        for json_record in esidfileconsumegenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, idfile=args.idfile_consume):
+        for json_record in esidfileconsumegenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, idfile=args.idfile_consume, chunksize=args.chunksize):
             sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
     elif not args.id:
-        for json_record in esgenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, verbose=True):
+        for json_record in esgenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, verbose=True, chunksize=args.chunksize):
             sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
     else:
         es = elasticsearch.Elasticsearch([{"host": args.host}], port=args.port)
