@@ -190,21 +190,23 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
     tracer.addHandler(logging.FileHandler('errors.txt'))
     es = elasticsearch.Elasticsearch(
         [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
-    ids = set()
+    ids_set = set()
+    ids = list()
 
     if isinstance(idfile, str) and isfile(idfile):
         with open(idfile, "r") as inp:
             for ppn in inp:
                 _id = ppn.rstrip()
-                ids.add(_id)
+                ids_set.add(_id)
     elif isiter(idfile) and not isinstance(idfile, str) and not isfile(idfile):
         for ppn in idfile:
-            ids.add(ppn.rstrip())
-    if len(ids) >= chunksize:
+            ids_set.add(ppn.rstrip())
+    ids = list(ids_set)
+    while len(ids) >= chunksize:
         if body and "query" in body and "match" in body["query"]:
             searchbody = {
                 "query": {"bool": {"must": [{"match": body["query"]["match"]}, {}]}}}
-            for _id in ids:
+            for _id in ids[:chunksize]:
                 searchbody["query"]["bool"]["must"][1] = {
                     "match": {"_id": _id}}
                 # eprint(json.dumps(searchbody))
@@ -213,9 +215,9 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
                         yield doc.get("_source")
                     else:
                         yield doc
-            ids.clear()
+            del ids[:chunksize]
         else:
-            searchbody = {'ids': list(ids)}
+            searchbody = {'ids': ids[:chunksize]}
             try:
                 if elasticsearch.VERSION < (7, 0, 0):
                     for doc in es.mget(index=index, doc_type=type, body=searchbody, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
@@ -230,42 +232,42 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
                             yield doc.get("_source")
                         else:
                             yield doc
-                ids.clear()
+                del ids[:chunksize]
             except elasticsearch.exceptions.NotFoundError as e:
                 traceback.print_exc()
-        if len(ids) > 0:
-            if body and "query" in body and "match" in body["query"]:
-                searchbody = {
-                    "query": {"bool": {"must": [{"match": body["query"]["match"]}, {}]}}}
-                for _id in ids:
-                    searchbody["query"]["bool"]["must"][1] = {
-                        "match": {"_id": _id}}
-                    # eprint(json.dumps(searchbody))
-                    for doc in esgenerator(host=host, port=port, index=index, type=type, body=searchbody, source=source, source_exclude=source_exclude, source_include=source_include, headless=False, timeout=timeout, verbose=False):
+    while len(ids) > 0:
+        if body and "query" in body and "match" in body["query"]:
+            searchbody = {
+                "query": {"bool": {"must": [{"match": body["query"]["match"]}, {}]}}}
+            for _id in ids:
+                searchbody["query"]["bool"]["must"][1] = {
+                    "match": {"_id": _id}}
+                # eprint(json.dumps(searchbody))
+                for doc in esgenerator(host=host, port=port, index=index, type=type, body=searchbody, source=source, source_exclude=source_exclude, source_include=source_include, headless=False, timeout=timeout, verbose=False):
+                    if headless:
+                        yield doc.get("_source")
+                    else:
+                        yield doc
+            del ids[:]
+        else:
+            searchbody = {'ids': ids}
+            try:
+                if elasticsearch.VERSION < (7, 0, 0):
+                    for doc in es.mget(index=index, doc_type=type, body=searchbody, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
                         if headless:
                             yield doc.get("_source")
                         else:
                             yield doc
-                ids.clear()
-            else:
-                searchbody = {'ids': list(ids)}
-                try:
-                    if elasticsearch.VERSION < (7, 0, 0):
-                        for doc in es.mget(index=index, doc_type=type, body=searchbody, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
-                            if headless:
-                                yield doc.get("_source")
-                            else:
-                                yield doc
-                    # no doc_type and slightly different _source parameters in elasticsearch7
-                    elif elasticsearch.VERSION >= (7, 0, 0):
-                        for doc in es.mget(index=index, body=searchbody, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
-                            if headless:
-                                yield doc.get("_source")
-                            else:
-                                yield doc
-                    ids.clear()
-                except elasticsearch.exceptions.NotFoundError:
-                    pass
+                # no doc_type and slightly different _source parameters in elasticsearch7
+                elif elasticsearch.VERSION >= (7, 0, 0):
+                    for doc in es.mget(index=index, body=searchbody, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
+                        if headless:
+                            yield doc.get("_source")
+                        else:
+                            yield doc
+                del ids[:]
+            except elasticsearch.exceptions.NotFoundError as e:
+                traceback.print_exc()
 
 #   returns records which have a certain ID from an ID-File from an elasticsearch-index
 #   IDs in the ID-File shall be non-quoted, newline-seperated
@@ -275,11 +277,12 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
 
 def esidfileconsumegenerator(host=None, port=9200, index=None, type=None, body=None, source=True, source_exclude=None, source_include=None, idfile=None, headless=False, chunksize=1000, timeout=10):
     if isfile(idfile):
-        ids = list()
+        ids = set()
         notfound_ids = set()
         with open(idfile, "r") as inp:
             for ppn in inp:
-                ids.append(ppn.rstrip())
+                ids.add(ppn.rstrip())
+        list_ids = list(ids)
         if not source:
             source = True
         tracer = logging.getLogger('elasticsearch')
@@ -288,49 +291,45 @@ def esidfileconsumegenerator(host=None, port=9200, index=None, type=None, body=N
         es = elasticsearch.Elasticsearch(
             [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
         success = False
-        _ids = set()
         try:
-            for _id in ids:
-                _ids.add(ids.pop())
-                if len(_ids) >= chunksize:
-                    if elasticsearch.VERSION < (7, 0, 0):
-                        for doc in es.mget(index=index, doc_type=type, body={'ids': list(_ids)}, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
-                            if headless:
-                                yield doc.get("_source")
-                            else:
-                                yield doc
-                    # no doc_type and slightly different _source parameters in elasticsearch7
-                    elif elasticsearch.VERSION >= (7, 0, 0):
-                        for doc in es.mget(index=index, body={'ids': list(_ids)}, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
-                            if headless:
-                                yield doc.get("_source")
-                            else:
-                                yield doc
-                    _ids.clear()
-            if len(_ids) > 0:
+            while len(list_ids) >= chunksize:
                 if elasticsearch.VERSION < (7, 0, 0):
-                    for doc in es.mget(index=index, doc_type=type, body={'ids': list(_ids)}, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
+                    for doc in es.mget(index=index, doc_type=type, body={'ids': list_ids[:chunksize]}, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
                         if headless:
                             yield doc.get("_source")
                         else:
                             yield doc
                 # no doc_type and slightly different _source parameters in elasticsearch7
                 elif elasticsearch.VERSION >= (7, 0, 0):
-                    for doc in es.mget(index=index, body={'ids': list(_ids)}, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
+                    for doc in es.mget(index=index, body={'ids': list_ids[:chunksize]}, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
                         if headless:
                             yield doc.get("_source")
                         else:
                             yield doc
-                _ids.clear()
-                ids.clear()
+                del list_ids[:chunksize]
+            if len(list_ids) > 0:
+                if elasticsearch.VERSION < (7, 0, 0):
+                    for doc in es.mget(index=index, doc_type=type, body={'ids': list_ids}, _source_include=source_include, _source_exclude=source_exclude, _source=source).get("docs"):
+                        if headless:
+                            yield doc.get("_source")
+                        else:
+                            yield doc
+                # no doc_type and slightly different _source parameters in elasticsearch7
+                elif elasticsearch.VERSION >= (7, 0, 0):
+                    for doc in es.mget(index=index, body={'ids': list_ids}, _source_includes=source_include, _source_excludes=source_exclude, _source=source).get("docs"):
+                        if headless:
+                            yield doc.get("_source")
+                        else:
+                            yield doc
+                del list_ids[:]
         except elasticsearch.exceptions.NotFoundError:
-            notfound_ids.add(_ids)
+            notfound_ids.add(list_ids[:chunksize])
         else:
             os.remove(idfile)
         finally:
-            ids += notfound_ids
+            list_ids += list(notfound_ids)
             with open(idfile, "w") as outp:
-                for _id in ids:
+                for _id in list_ids:
                     print(_id, file=outp)
 
     # avoid dublettes and nested lists when adding elements into lists
