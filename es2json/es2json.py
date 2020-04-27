@@ -80,7 +80,9 @@ def eprintjs(*args, **kwargs):
 def esfatgenerator(host=None, port=9200, index=None, type=None, chunksize=1000, body=None, source=True, source_exclude=None, source_include=None, timeout=10):
     if not source:
         source = True
-    es = elasticsearch.Elasticsearch([{'host': host}], port=port)
+    es = elasticsearch.Elasticsearch(
+        [{'host': host, 'port': port, 'timeout': timeout, 'max_retries': 10, 'retry_on_timeout': True, 'http_compress': True}]
+        )
     try:
         if elasticsearch.VERSION < (7, 0, 0):
             page = es.search(
@@ -125,7 +127,8 @@ def esgenerator(host=None, port=9200, index=None, type=None, id=None, chunksize=
     if not source:
         source = True
     es = elasticsearch.Elasticsearch(
-        [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
+        [{'host': host, 'port': port, 'timeout': timeout, 'max_retries': 10, 'retry_on_timeout': True, 'http_compress': True}]
+        )
     try:
         if id:
             if elasticsearch.VERSION < (7, 0, 0):
@@ -189,7 +192,8 @@ def esidfilegenerator(host=None, port=9200, index=None, type=None, body=None, so
     tracer.setLevel(logging.WARNING)
     tracer.addHandler(logging.FileHandler('errors.txt'))
     es = elasticsearch.Elasticsearch(
-        [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
+        [{'host': host, 'port': port, 'timeout': timeout, 'max_retries': 10, 'retry_on_timeout': True, 'http_compress': True}]
+        )
     ids_set = set()
     ids = list()
 
@@ -289,7 +293,8 @@ def esidfileconsumegenerator(host=None, port=9200, index=None, type=None, body=N
         tracer.setLevel(logging.WARNING)
         tracer.addHandler(logging.FileHandler('errors.txt'))
         es = elasticsearch.Elasticsearch(
-            [{'host': host}], port=port, timeout=timeout, max_retries=10, retry_on_timeout=True)
+        [{'host': host, 'port': port, 'timeout': timeout, 'max_retries': 10, 'retry_on_timeout': True, 'http_compress': True}]
+        )
         success = False
         try:
             while len(list_ids) >= chunksize:
@@ -420,7 +425,9 @@ def run():
         for json_record in esgenerator(host=args.host, port=args.port, index=args.index, type=args.type, body=args.body, source=args.source, headless=args.headless, source_exclude=args.exclude, source_include=args.include, verbose=True, chunksize=args.chunksize):
             sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
     else:
-        es = elasticsearch.Elasticsearch([{"host": args.host}], port=args.port)
+        es = elasticsearch.Elasticsearch(
+        [{'host': host, 'port': port, 'timeout': timeout, 'max_retries': 10, 'retry_on_timeout': True, 'http_compress': True}]
+        )
         json_record = None
         if not args.headless and elasticsearch.VERSION < (7, 0, 0):
             json_record = es.get(index=args.index, doc_type=args.type, _source=True,
