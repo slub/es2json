@@ -130,6 +130,7 @@ def esfatgenerator(host=None,
           'http_compress': True
         }]
         )
+    server_version = es.info()['version']['number']
     try:
         if elasticsearch.VERSION < (7, 0, 0):
             page = es.search(
@@ -142,7 +143,6 @@ def esfatgenerator(host=None,
                 _source_exclude=source_exclude,
                 _source_include=source_include,
                 request_timeout=timeout)
-            scroll_size = page['hits']['total']
         elif elasticsearch.VERSION >= (7, 0, 0):
             page = es.search(
                 index=index,
@@ -153,7 +153,10 @@ def esfatgenerator(host=None,
                 _source_excludes=source_exclude,
                 _source_includes=source_include,
                 request_timeout=timeout)
-            scroll_size = page['hits']['total']['value']
+        if int(server_version[0]) < 7:
+            scroll_size = page['hits']['total']
+        elif int(server_version[0]) >= 7:
+            scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
         sys.stderr.write("aborting.\n")
         exit(-1)
@@ -196,6 +199,7 @@ def esgenerator(host=None,
           'http_compress': True
         }]
         )
+    server_version = es.info()['version']['number']
     try:
         if id:
             if elasticsearch.VERSION < (7, 0, 0):
@@ -217,7 +221,6 @@ def esgenerator(host=None,
                 _source=source,
                 _source_exclude=source_exclude,
                 _source_include=source_include)
-            scroll_size = page['hits']['total']
         # no doc_type and slightly different parameters in elasticsearch7
         elif elasticsearch.VERSION >= (7, 0, 0):
             page = es.search(
@@ -228,6 +231,9 @@ def esgenerator(host=None,
                 _source=source,
                 _source_excludes=source_exclude,
                 _source_includes=source_include)
+        if int(server_version[0]) < 7:
+            scroll_size = page['hits']['total']
+        elif int(server_version[0]) >= 7:
             scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
         sys.stderr.write("not found: "+host+":"+str(port) +
