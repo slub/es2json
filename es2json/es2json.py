@@ -249,8 +249,12 @@ def esgenerator(host=None,
         pages = es.scroll(scroll_id=sid, scroll='12h')
         sid = pages['_scroll_id']
         scroll_size = len(pages['hits']['hits'])
+        if int(server_version[0]) < 7:
+            total_size = page['hits']['total']
+        elif int(server_version[0]) >= 7:
+            total_size = page['hits']['total']["value"]
         if verbose:
-            eprint("{}/{}".format(progress, pages['hits']['total']))
+            eprint("{}/{}".format(progress, total_size))
             progress += chunksize
         for hits in pages['hits']['hits']:
             if headless:
@@ -652,14 +656,14 @@ def run():
             sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
     else:
         es = elasticsearch.Elasticsearch(
-        [{
-          'host': host,
-          'port': port,
-          'timeout': timeout,
-          'max_retries': 10,
-          'retry_on_timeout':True,
-          'http_compress': True
-        }]
+            [{
+                'host': host,
+                'port': port,
+                'timeout': timeout,
+                'max_retries': 10,
+                'retry_on_timeout': True,
+                'http_compress': True
+            }]
         )
         json_record = None
         if not args.headless and elasticsearch.VERSION < (7, 0, 0):
@@ -669,7 +673,7 @@ def run():
                                  _source_exclude=args.exclude,
                                  _source_include=args.include,
                                  id=args.id)
-        elif not args.headless and elasticsearch.VERSION > (7, 0, 0):
+        elif not args.headless and elasticsearch.VERSION >= (7, 0, 0):
             json_record = es.get(index=args.index,
                                  _source=True,
                                  _source_excludes=args.exclude,
@@ -682,7 +686,7 @@ def run():
                                         _source_exclude=args.exclude,
                                         _source_include=args.include,
                                         id=args.id)
-        elif elasticsearch.VERSION > (7, 0, 0):
+        elif elasticsearch.VERSION >= (7, 0, 0):
             json_record = es.get_source(index=args.index,
                                         _source=True,
                                         _source_excludes=args.exclude,
