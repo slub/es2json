@@ -103,6 +103,36 @@ def eprintjs(*args, **kwargs):
         print(json.dumps(arg, indent=4), file=sys.stderr, **kwargs)
 
 
+class ES_wrapper:
+    """ wraps functionality of the python elasticsearch client used in lod-api
+
+        In Order to properly react on different elasticsearch versions
+        this wrapper manages the difference in function calls to the es api
+    """
+    @staticmethod
+    def call(es, action, **kwargs):
+        """ Call a method of the elasticsearch api on a specified index
+        with multiple variable kwargs as options to each call. """
+        server_version = int(es.info()['version']['number'][0])
+        client_version = elasticsearch.VERSION[0]
+        if server_version < 7 and client_version < 7:
+            if '_source_excludes' in kwargs:
+                kwargs['_source_exclude'] = kwargs.pop('_source_excludes')
+            if '_source_includes' in kwargs:
+                kwargs['_source_include'] = kwargs.pop('_source_includes')
+        return getattr(es, action)(**kwargs)
+
+    @staticmethod
+    def get_mapping_props(es, index, doc_type=None):
+        """ Requests the properties of a mapping applied to one index """
+        server_version = int(es.info()['version']['number'][0])
+        mapping = es.indices.get_mapping(index=index)
+        if server_version < 7 and doc_type:
+            return mapping[index]["mappings"][doc_type]["properties"]
+        elif server_version >= 7:
+            return mapping[index]["mappings"]["properties"]
+
+
 def esfatgenerator(host=None,
                    port=9200,
                    index=None,
@@ -110,8 +140,8 @@ def esfatgenerator(host=None,
                    chunksize=1000,
                    body=None,
                    source=True,
-                   source_exclude=None,
-                   source_include=None,
+                   source_excludes=None,
+                   source_includes=None,
                    timeout=10):
     '''
     dumps elasticsearch indices (or restricted by search body),
@@ -132,27 +162,17 @@ def esfatgenerator(host=None,
         )
     server_version = es.info()['version']['number']
     try:
-        if elasticsearch.VERSION < (7, 0, 0):
-            page = es.search(
-                index=index,
-                doc_type=type,
-                scroll='12h',
-                size=chunksize,
-                body=body,
-                _source=source,
-                _source_exclude=source_exclude,
-                _source_include=source_include,
-                request_timeout=timeout)
-        elif elasticsearch.VERSION >= (7, 0, 0):
-            page = es.search(
-                index=index,
-                scroll='12h',
-                size=chunksize,
-                body=body,
-                _source=source,
-                _source_excludes=source_exclude,
-                _source_includes=source_include,
-                request_timeout=timeout)
+        page = ES_wrapper.call(es,
+                               'search',
+                               index=index,
+                               doc_type=type,
+                               scroll='12h',
+                               size=chunksize,
+                               body=body,
+                               source=source,
+                               _source_excludes=source_excludes,
+                               _source_includes=source_includes,
+                               request_timeout=timeout)
         if int(server_version[0]) < 7:
             scroll_size = page['hits']['total']
         elif int(server_version[0]) >= 7:
@@ -163,7 +183,10 @@ def esfatgenerator(host=None,
     sid = page['_scroll_id']
     yield page['hits']['hits']
     while (scroll_size > 0):
-        pages = es.scroll(scroll_id=sid, scroll='12h')
+        pages = ES_wrapper.call(es,
+                                'scroll',
+                                scroll_id=sid,
+                                scroll='12h')
         sid = pages['_scroll_id']
         scroll_size = len(pages['hits']['hits'])
         yield pages['hits']['hits']
@@ -177,8 +200,8 @@ def esgenerator(host=None,
                 chunksize=1000,
                 body=None,
                 source=True,
-                source_exclude=None,
-                source_include=None,
+                source_excludes=None,
+                source_includes=None,
                 headless=False,
                 timeout=10,
                 verbose=False):
@@ -195,42 +218,34 @@ def esgenerator(host=None,
           'port': port,
           'timeout': timeout,
           'max_retries': 10,
-          'retry_on_timeout':True,
+          'retry_on_timeout': True,
           'http_compress': True
         }]
         )
     server_version = es.info()['version']['number']
     try:
         if id:
-            if elasticsearch.VERSION < (7, 0, 0):
-                record = es.get(index=index, doc_type=type, id=id)
-            elif elasticsearch.VERSION >= (7, 0, 0):
-                record = es.get(index=index, id=id)
+            record = ES_wrapper.call(es,
+                                     'get',
+                                     doc_type=type,
+                                     id=id,
+                                     _source_excludes=source_excludes,
+                                     _source_includes=source_includes)
             if headless:
                 yield record["_source"]
             else:
                 yield record
             return
-        if elasticsearch.VERSION < (7, 0, 0):
-            page = es.search(
-                index=index,
-                doc_type=type,
-                scroll='12h',
-                size=chunksize,
-                body=body,
-                _source=source,
-                _source_exclude=source_exclude,
-                _source_include=source_include)
-        # no doc_type and slightly different parameters in elasticsearch7
-        elif elasticsearch.VERSION >= (7, 0, 0):
-            page = es.search(
-                index=index,
-                scroll='12h',
-                size=chunksize,
-                body=body,
-                _source=source,
-                _source_excludes=source_exclude,
-                _source_includes=source_include)
+        page = ES_wrapper.call(es,
+                               'search',
+                               index=index,
+                               doc_type=type,
+                               scroll='12h',
+                               size=chunksize,
+                               body=body,
+                               _source=source,
+                               _source_excludes=source_excludes,
+                               _source_includes=source_includes)
         if int(server_version[0]) < 7:
             scroll_size = page['hits']['total']
         elif int(server_version[0]) >= 7:
@@ -246,7 +261,10 @@ def esgenerator(host=None,
         else:
             yield hits
     while (scroll_size > 0):
-        pages = es.scroll(scroll_id=sid, scroll='12h')
+        pages = ES_wrapper.call(es,
+                                'scroll',
+                                scroll_id=sid,
+                                scroll='12h')
         sid = pages['_scroll_id']
         scroll_size = len(pages['hits']['hits'])
         if int(server_version[0]) < 7:
@@ -269,8 +287,8 @@ def esidfilegenerator(host=None,
                       type=None,
                       body=None,
                       source=True,
-                      source_exclude=None,
-                      source_include=None,
+                      source_excludes=None,
+                      source_includes=None,
                       idfile=None,
                       headless=False,
                       chunksize=1000,
@@ -332,8 +350,8 @@ def esidfilegenerator(host=None,
                                        type=type,
                                        body=searchbody,
                                        source=source,
-                                       source_exclude=source_exclude,
-                                       source_include=source_include,
+                                       source_excludes=source_excludes,
+                                       source_includes=source_includes,
                                        headless=False,
                                        timeout=timeout,
                                        verbose=False):
@@ -345,20 +363,14 @@ def esidfilegenerator(host=None,
         else:
             searchbody = {'ids': ids[:chunksize]}
             try:
-                if elasticsearch.VERSION < (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   doc_type=type,
-                                   body=searchbody,
-                                   _source_include=source_include,
-                                   _source_exclude=source_exclude,
-                                   _source=source)["docs"]
-                # no doc_type and slightly different _source parameters in elasticsearch7
-                elif elasticsearch.VERSION >= (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   body=searchbody,
-                                   _source_includes=source_include,
-                                   _source_excludes=source_exclude,
-                                   _source=source)["docs"]
+                docs = ES_wrapper.call(es,
+                                       'mget',
+                                       index=index,
+                                       doc_type=type,
+                                       body=searchbody,
+                                       _source_includes=source_includes,
+                                       _source_excludes=source_excludes,
+                                       _source=source)["docs"]
                 for doc in docs:
                     if headless:
                         yield doc["_source"]
@@ -392,8 +404,8 @@ def esidfilegenerator(host=None,
                                        type=type,
                                        body=searchbody,
                                        source=source,
-                                       source_exclude=source_exclude,
-                                       source_include=source_include,
+                                       source_excludes=source_excludes,
+                                       source_includes=source_includes,
                                        headless=False,
                                        timeout=timeout,
                                        verbose=False):
@@ -405,23 +417,13 @@ def esidfilegenerator(host=None,
         else:
             searchbody = {'ids': ids}
             try:
-                if elasticsearch.VERSION < (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   doc_type=type,
-                                   body=searchbody,
-                                   _source_include=source_include,
-                                   _source_exclude=source_exclude,
-                                   _source=source)["docs"]
-                elif elasticsearch.VERSION >= (7, 0, 0):
-                    '''
-                    no doc_type and slightly different
-                    _source parameters in elasticsearch7
-                    '''
-                    docs = es.mget(index=index,
-                                   body=searchbody,
-                                   _source_includes=source_include,
-                                   _source_excludes=source_exclude,
-                                   _source=source)["docs"]
+                docs = ES_wrapper.call(es,
+                                       'mget',
+                                       doc_type=type,
+                                       body=searchbody,
+                                       _source_includes=source_includes,
+                                       _source_excludes=source_excludes,
+                                       _source=source)["docs"]
                 for doc in docs:
                     if headless:
                         yield ["_source"]
@@ -438,8 +440,8 @@ def esidfileconsumegenerator(host=None,
                              type=None,
                              body=None,
                              source=True,
-                             source_exclude=None,
-                             source_include=None,
+                             source_excludes=None,
+                             source_includes=None,
                              idfile=None,
                              headless=False,
                              chunksize=1000,
@@ -480,21 +482,14 @@ def esidfileconsumegenerator(host=None,
         success = False
         try:
             while len(list_ids) >= chunksize:
-                if elasticsearch.VERSION < (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   doc_type=type,
-                                   body={'ids': list_ids[:chunksize]},
-                                   _source_include=source_include,
-                                   _source_exclude=source_exclude,
-                                   _source=source)["docs"]
-                elif elasticsearch.VERSION >= (7, 0, 0):
-                    # no doc_type and slightly different 
-                    # _source parameters in elasticsearch7
-                    docs = es.mget(index=index,
-                                   body={'ids': list_ids[:chunksize]},
-                                   _source_includes=source_include,
-                                   _source_excludes=source_exclude,
-                                   _source=source)["docs"]
+                docs = ES_wrapper.call(es,
+                                       'mget',
+                                       index=index,
+                                       doc_type=type,
+                                       body={'ids': list_ids[:chunksize]},
+                                       _source_includes=source_includes,
+                                       _source_excludes=source_excludes,
+                                       _source=source)["docs"]
                 for doc in docs:
                     if headless:
                         yield doc["_source"]
@@ -502,20 +497,14 @@ def esidfileconsumegenerator(host=None,
                         yield doc
                 del list_ids[:chunksize]
             if len(list_ids) > 0:
-                if elasticsearch.VERSION < (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   doc_type=type,
-                                   body={'ids': list_ids},
-                                   _source_include=source_include,
-                                   _source_exclude=source_exclude,
-                                   _source=source)["docs"]
-                # no doc_type and slightly different _source parameters in elasticsearch7
-                elif elasticsearch.VERSION >= (7, 0, 0):
-                    docs = es.mget(index=index,
-                                   body={'ids': list_ids},
-                                   _source_includes=source_include,
-                                   _source_excludes=source_exclude,
-                                   _source=source)["docs"]
+                docs = ES_wrapper.call(es,
+                                       'mget',
+                                       index=index,
+                                       doc_type=type,
+                                       body={'ids': list_ids},
+                                       _source_includes=source_includes,
+                                       _source_excludes=source_excludes,
+                                       _source=source)["docs"]
                 for doc in docs:
                     if headless:
                         yield doc.get("_source")
@@ -576,9 +565,9 @@ def run():
     parser.add_argument('-type', type=str,
                         help='ElasticSearch Search Index Type to use')
     parser.add_argument('-source', type=str, help='just return this field(s)')
-    parser.add_argument("-include", type=str,
+    parser.add_argument("-includes", type=str,
                         help="include following _source field(s)")
-    parser.add_argument("-exclude", type=str,
+    parser.add_argument("-excludes", type=str,
                         help="exclude following _source field(s)")
     parser.add_argument(
         "-id", type=str, help="retrieve single document (optional)")
@@ -623,11 +612,11 @@ def run():
                                              body=args.body,
                                              source=args.source,
                                              headless=args.headless,
-                                             source_exclude=args.exclude,
-                                             source_include=args.include,
+                                             source_excludes=args.excludes,
+                                             source_includes=args.includes,
                                              idfile=args.idfile,
                                              chunksize=args.chunksize):
-            sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
+            print(json.dumps(json_record, indent=tabbing))
     elif args.idfile_consume:
         for json_record in esidfileconsumegenerator(host=args.host,
                                                     port=args.port,
@@ -636,11 +625,11 @@ def run():
                                                     body=args.body,
                                                     source=args.source,
                                                     headless=args.headless,
-                                                    source_exclude=args.exclude,
-                                                    source_include=args.include,
+                                                    source_excludes=args.excludes,
+                                                    source_includes=args.includes,
                                                     idfile=args.idfile_consume,
                                                     chunksize=args.chunksize):
-            sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
+            print(json.dumps(json_record, indent=tabbing))
     elif not args.id:
         for json_record in esgenerator(host=args.host,
                                        port=args.port,
@@ -649,51 +638,33 @@ def run():
                                        body=args.body,
                                        source=args.source,
                                        headless=args.headless,
-                                       source_exclude=args.exclude,
-                                       source_include=args.include,
+                                       source_excludes=args.excludes,
+                                       source_includes=args.includes,
                                        verbose=True,
                                        chunksize=args.chunksize):
-            sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
+            print(json.dumps(json_record, indent=tabbing))
     else:
         es = elasticsearch.Elasticsearch(
             [{
-                'host': host,
-                'port': port,
-                'timeout': timeout,
+                'host': args.host,
+                'port': args.port,
                 'max_retries': 10,
                 'retry_on_timeout': True,
                 'http_compress': True
             }]
         )
-        json_record = None
-        if not args.headless and elasticsearch.VERSION < (7, 0, 0):
-            json_record = es.get(index=args.index,
-                                 doc_type=args.type,
-                                 _source=True,
-                                 _source_exclude=args.exclude,
-                                 _source_include=args.include,
-                                 id=args.id)
-        elif not args.headless and elasticsearch.VERSION >= (7, 0, 0):
-            json_record = es.get(index=args.index,
-                                 _source=True,
-                                 _source_excludes=args.exclude,
-                                 _source_includes=args.include,
-                                 id=args.id)
-        elif elasticsearch.VERSION < (7, 0, 0):
-            json_record = es.get_source(index=args.index,
-                                        doc_type=args.type,
-                                        _source=True,
-                                        _source_exclude=args.exclude,
-                                        _source_include=args.include,
-                                        id=args.id)
-        elif elasticsearch.VERSION >= (7, 0, 0):
-            json_record = es.get_source(index=args.index,
-                                        _source=True,
-                                        _source_excludes=args.exclude,
-                                        _source_includes=args.include,
-                                        id=args.id)
-        if json_record:
-            sys.stdout.write(json.dumps(json_record, indent=tabbing)+"\n")
+        json_record = ES_wrapper.call(es,
+                                      'get',
+                                      index=args.index,
+                                      doc_type=args.type,
+                                      _source=True,
+                                      _source_excludes=args.excludes,
+                                      _source_includes=args.includes,
+                                      id=args.id)
+        if json_record and args.headless:
+            print(json.dumps(json_record["_source"], indent=tabbing))
+        elif json_record and not args.headless:
+            print(json.dumps(json_record, indent=tabbing))
 
 
 if __name__ == "__main__":
