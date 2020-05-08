@@ -5,6 +5,7 @@ import elasticsearch
 import argparse
 import logging
 import sys
+import traceback
 import os
 from httplib2 import Http  # needed for put_dict
 
@@ -178,7 +179,8 @@ def esfatgenerator(host=None,
         elif int(server_version[0]) >= 7:
             scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
-        sys.stderr.write("aborting.\n")
+        eprint("not found: {h}:{p}/{i}/{t}/_search"
+                                 .format(h=host,p=port,i=index,t=type))
         exit(-1)
     sid = page['_scroll_id']
     yield page['hits']['hits']
@@ -227,6 +229,7 @@ def esgenerator(host=None,
         if id:
             record = ES_wrapper.call(es,
                                      'get',
+                                     index=index,
                                      doc_type=type,
                                      id=id,
                                      _source_excludes=source_excludes,
@@ -251,8 +254,8 @@ def esgenerator(host=None,
         elif int(server_version[0]) >= 7:
             scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
-        sys.stderr.write("not found: "+host+":"+str(port) +
-                         "/"+index+"/"+type+"/_search\n")
+        eprint("not found: {h}:{p}/{i}/{t}/_search"
+                                 .format(h=host,p=port,i=index,t=type))
         exit(-1)
     sid = page['_scroll_id']
     for hits in page['hits']['hits']:
@@ -343,7 +346,7 @@ def esidfilegenerator(host=None,
             }
             for _id in ids[:chunksize]:
                 searchbody["query"]["bool"]["must"][1]["match"] = {"_id": _id}
-                # eprint(json.dumps(searchbody))
+                eprint(json.dumps(searchbody))
                 for doc in esgenerator(host=host,
                                        port=port,
                                        index=index,
@@ -409,29 +412,45 @@ def esidfilegenerator(host=None,
                                        headless=False,
                                        timeout=timeout,
                                        verbose=False):
-                    if headless:
+                    if headless and doc["found"]:
                         yield doc["_source"]
-                    else:
+                    elif doc["found"]:
                         yield doc
+                    else: 
+                        eprint("not found: {h}:{p}/{i}/{t}/{id}"
+                            .format(h=host,
+                                    p=port,
+                                    i=doc['_index'],
+                                    t=doc['_type'],
+                                    id=doc['_id']))
             del ids[:]
         else:
             searchbody = {'ids': ids}
             try:
                 docs = ES_wrapper.call(es,
                                        'mget',
+                                       index=index,
                                        doc_type=type,
                                        body=searchbody,
                                        _source_includes=source_includes,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless:
-                        yield ["_source"]
-                    else:
-                            yield doc
+                    if headless and doc["found"]:
+                        yield doc["_source"]
+                    elif doc["found"]:
+                        yield doc
+                    else: 
+                        eprint("not found: {h}:{p}/{i}/{t}/{id}"
+                                 .format(h=host,
+                                         p=port,
+                                         i=doc['_index'],
+                                         t=doc['_type'],
+                                         id=doc['_id']))
                     del ids[:]
             except elasticsearch.exceptions.NotFoundError as e:
-                traceback.print_exc()
+                eprint("not found: {h}:{p}/{i}/{t}/_search"
+                                 .format(h=host,p=port,i=index,t=type))
 
 
 def esidfileconsumegenerator(host=None,
@@ -475,7 +494,7 @@ def esidfileconsumegenerator(host=None,
           'port': port,
           'timeout': timeout,
           'max_retries': 10,
-          'retry_on_timeout':True,
+          'retry_on_timeout': True,
           'http_compress': True
         }]
         )
@@ -491,10 +510,12 @@ def esidfileconsumegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless:
-                        yield doc["_source"]
-                    else:
+                    if headless and doc["found"]:
+                        yield doc.get("_source")
+                    elif doc["found"]:
                         yield doc
+                    elif not doc["found"]:
+                        notfound_ids.add(doc["_id"])
                 del list_ids[:chunksize]
             if len(list_ids) > 0:
                 docs = ES_wrapper.call(es,
@@ -506,12 +527,15 @@ def esidfileconsumegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless:
+                    if headless and doc["found"]:
                         yield doc.get("_source")
-                    else:
+                    elif doc["found"]:
                         yield doc
+                    elif not doc["found"]:
+                        notfound_ids.add(doc["_id"])
                 del list_ids[:]
-        except elasticsearch.exceptions.NotFoundError:
+        except elasticsearch.exceptions.NotFoundError as e:
+            eprint("notfound")
             notfound_ids.add(list_ids[:chunksize])
         else:
             os.remove(idfile)
