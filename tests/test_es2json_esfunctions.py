@@ -3,17 +3,19 @@ import json
 import uuid
 import os
 
-host = "localhost"
+host = "192.168.0.177"
 port = 9200
 testindex = "test"
 test_doctype = "_doc"
 
 def test_esgenerator():
+    expected_records = []
+    records = []
     for n, record in enumerate(es2json.esgenerator(host=host,
                                                    port=port,
                                                    index=testindex,
                                                    type=test_doctype)):
-        expected = {"_index": "test",
+        expected_records.append({"_index": "test",
                     "_type": "_doc",
                     "_id": str(n),
                     "_score": 1.0,
@@ -22,51 +24,64 @@ def test_esgenerator():
                         "bar": 1000-n,
                         "baz": "test{}".format(n)
                         }
-                    }
-
-        assert record == expected
+                    })
+        records.append(record)
+    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
+    records_sorted = sorted(records, key=lambda k: k["_id"])
+    assert records_sorted == expected_sorted
 
 
 def test_esgenerator_NoneSource():
+    expected_records = []
+    records = []
     for n, record in enumerate(es2json.esgenerator(host=host,
                                                    port=port,
                                                    index=testindex,
                                                    type=test_doctype,
                                                    source="None")):
-        expected = {"_index": "test",
+        expected_records.append({"_index": "test",
                     "_type": "_doc",
                     "_id": str(n),
                     "_score": 1.0,
                     "_source": {}
-                    }
-        assert record == expected
+                    })
+        records.append(record)
+    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
+    records_sorted = sorted(records, key=lambda k: k["_id"])
+    assert records_sorted == expected_sorted
 
 
 def test_esgenerator_source_includes():
+    expected_records = []
+    records = []
     for n, record in enumerate(es2json.esgenerator(host=host,
                                                    port=port,
                                                    index=testindex,
                                                    type=test_doctype,
                                                    source_includes="foo")):
-        expected = {"_index": "test",
+        expected_records.append({"_index": "test",
                     "_type": "_doc",
                     "_id": str(n),
                     "_score": 1.0,
                     "_source": {
                         "foo": n
                         }
-                    }
-
-        assert record == expected
+                    })
+        records.append(record)
+    expected_sorted = sorted(expected_records, key=lambda k: k['_id'])
+    records_sorted = sorted(records, key=lambda k: k['_id'])
+    assert records_sorted == expected_sorted
 
 
 def test_esgenerator_source_excludes():
+    expected_records = []
+    records = []
     for n, record in enumerate(es2json.esgenerator(host=host,
                                                    port=port,
                                                    index=testindex,
                                                    type=test_doctype,
                                                    source_excludes="bar")):
-        expected = {"_index": "test",
+        expected_records.append({"_index": "test",
                     "_type": "_doc",
                     "_id": str(n),
                     "_score": 1.0,
@@ -74,9 +89,11 @@ def test_esgenerator_source_excludes():
                         "foo": n,
                         "baz": "test{}".format(n)
                         }
-                    }
-
-        assert record == expected
+                    })
+        records.append(record)
+    expected_sorted = sorted(expected_records, key=lambda k: k['_id'])
+    records_sorted = sorted(records, key=lambda k: k['_id'])
+    assert records_sorted == expected_sorted
 
 
 def test_esgenerator_query_headless():
@@ -113,7 +130,7 @@ def test_esidfilegenerator_iterable():
         records.append(record)
     expected_sorted = sorted(expected_records, key=lambda k: k['foo'])
     records_sorted = sorted(records, key=lambda k: k['foo'])
-    
+
     assert records_sorted == expected_sorted
 
 
