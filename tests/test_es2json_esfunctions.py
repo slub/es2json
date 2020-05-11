@@ -3,7 +3,7 @@ import json
 import uuid
 import os
 
-host = "192.168.0.177"
+host = "localhost"
 port = 9200
 testindex = "test"
 test_doctype = "_doc"
