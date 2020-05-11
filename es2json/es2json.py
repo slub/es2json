@@ -157,7 +157,7 @@ def esfatgenerator(host=None,
           'port': port,
           'timeout': timeout,
           'max_retries': 10,
-          'retry_on_timeout':True,
+          'retry_on_timeout': True,
           'http_compress': True
         }]
         )
@@ -180,7 +180,7 @@ def esfatgenerator(host=None,
             scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
         eprint("not found: {h}:{p}/{i}/{t}/_search"
-                                 .format(h=host,p=port,i=index,t=type))
+               .format(h=host, p=port, i=index, t=type))
         exit(-1)
     sid = page['_scroll_id']
     yield page['hits']['hits']
@@ -255,7 +255,7 @@ def esgenerator(host=None,
             scroll_size = page['hits']['total']["value"]
     except elasticsearch.exceptions.NotFoundError:
         eprint("not found: {h}:{p}/{i}/{t}/_search"
-                                 .format(h=host,p=port,i=index,t=type))
+               .format(h=host, p=port, i=index, t=type))
         exit(-1)
     sid = page['_scroll_id']
     for hits in page['hits']['hits']:
@@ -312,7 +312,7 @@ def esidfilegenerator(host=None,
           'port': port,
           'timeout': timeout,
           'max_retries': 10,
-          'retry_on_timeout':True,
+          'retry_on_timeout': True,
           'http_compress': True
         }]
         )
@@ -380,7 +380,7 @@ def esidfilegenerator(host=None,
                     else:
                         yield doc
                 del ids[:chunksize]
-            except elasticsearch.exceptions.NotFoundError as e:
+            except elasticsearch.exceptions.NotFoundError:
                 traceback.print_exc()
     while len(ids) > 0:
         if body and "query" in body and "match" in body["query"]:
@@ -416,13 +416,13 @@ def esidfilegenerator(host=None,
                         yield doc["_source"]
                     elif doc["found"]:
                         yield doc
-                    else: 
+                    else:
                         eprint("not found: {h}:{p}/{i}/{t}/{id}"
-                            .format(h=host,
-                                    p=port,
-                                    i=doc['_index'],
-                                    t=doc['_type'],
-                                    id=doc['_id']))
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
             del ids[:]
         else:
             searchbody = {'ids': ids}
@@ -440,17 +440,17 @@ def esidfilegenerator(host=None,
                         yield doc["_source"]
                     elif doc["found"]:
                         yield doc
-                    else: 
+                    else:
                         eprint("not found: {h}:{p}/{i}/{t}/{id}"
-                                 .format(h=host,
-                                         p=port,
-                                         i=doc['_index'],
-                                         t=doc['_type'],
-                                         id=doc['_id']))
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
                     del ids[:]
-            except elasticsearch.exceptions.NotFoundError as e:
+            except elasticsearch.exceptions.NotFoundError:
                 eprint("not found: {h}:{p}/{i}/{t}/_search"
-                                 .format(h=host,p=port,i=index,t=type))
+                       .format(h=host, p=port, i=index, t=type))
 
 
 def esidfileconsumegenerator(host=None,
@@ -470,10 +470,11 @@ def esidfileconsumegenerator(host=None,
     dumps single records per yield
     consumes the idfile, if all records are successfull transceived,
     the idfile is going to be empty. if there is an error inbetween,
-    the idfile is going to be partly used for the successfull pages which are printed
-    if the error occurs inbetween a page, the page will not be successfull printed out completely,
-    but will be purged from the idfile. reduce chunksize parameter to reduce this error.
-    but lesser chunksize is also lesser performance
+    the idfile is going to be partly used for the successfull pages which are
+    printed, if the error occurs inbetween a page, the page will not be
+    successfull printed out completely, but will be purged from the idfile.
+    reduce chunksize parameter to reduce this error. but lesser chunksize is
+    also lesser performance
     TODO: implement usage of functioning search querys, atm its very limited
     '''
     if isfile(idfile):
@@ -488,17 +489,13 @@ def esidfileconsumegenerator(host=None,
         tracer = logging.getLogger('elasticsearch')
         tracer.setLevel(logging.WARNING)
         tracer.addHandler(logging.FileHandler('errors.txt'))
-        es = elasticsearch.Elasticsearch(
-        [{
-          'host': host,
-          'port': port,
-          'timeout': timeout,
-          'max_retries': 10,
-          'retry_on_timeout': True,
-          'http_compress': True
-        }]
-        )
-        success = False
+        es = elasticsearch.Elasticsearch([{'host': host,
+                                           'port': port,
+                                           'timeout': timeout,
+                                           'max_retries': 10,
+                                           'retry_on_timeout': True,
+                                           'http_compress': True
+                                           }])
         try:
             while len(list_ids) >= chunksize:
                 docs = ES_wrapper.call(es,
@@ -534,7 +531,7 @@ def esidfileconsumegenerator(host=None,
                     elif not doc["found"]:
                         notfound_ids.add(doc["_id"])
                 del list_ids[:]
-        except elasticsearch.exceptions.NotFoundError as e:
+        except elasticsearch.exceptions.NotFoundError:
             eprint("notfound")
             notfound_ids.add(list_ids[:chunksize])
         else:
@@ -581,9 +578,10 @@ def litter(lst, elm):
 def run():
     parser = argparse.ArgumentParser(description='Elasticsearch to JSON')
     parser.add_argument('-host', type=str, default="127.0.0.1",
-                        help='hostname or ip of the ElasticSearch-node to use, default: localhost.')
+                        help='hostname or ip of the ElasticSearch-node to use,'
+                        ' default: localhost.')
     parser.add_argument('-port', type=int, default=9200,
-                        help='Port of the ElasticSearch-node to use, default is 9200.')
+                        help='Port of the ElasticSearch-node to use, default: 9200.')
     parser.add_argument('-index', type=str,
                         help='ElasticSearch Search Index to use')
     parser.add_argument('-type', type=str,
@@ -596,19 +594,20 @@ def run():
     parser.add_argument(
         "-id", type=str, help="retrieve single document (optional)")
     parser.add_argument("-headless", action="store_true",
-                        default=False, help="don't include Elasticsearch Metafields")
+                        default=False, help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=json.loads, help='Searchbody')
     # no, i don't steal the syntax from esbulk...
     parser.add_argument(
-        '-server', type=str, help="use http://host:port/index/type/id?pretty. overwrites host/port/index/id/pretty")
+        '-server', type=str, help="use http://host:port/index/type/id?pretty. "
+        "overwrites host/port/index/id/pretty")
     parser.add_argument(
-        '-idfile', type=str, help="path to a file with newline-delimited IDs to process")
+        '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
-                        help="path to a file with newline-delimited IDs to process")
+                        help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-pretty', action="store_true",
                         default=False, help="prettyprint")
-    parser.add_argument('-chunksize', type=int, default=1000, help=
-                        "chunksize of the search window to use")
+    parser.add_argument('-chunksize', type=int, default=1000,
+                        help="chunksize of the search window to use")
     args = parser.parse_args()
     if args.server:
         slashsplit = args.server.split("/")

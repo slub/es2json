@@ -81,10 +81,10 @@ def test_esgenerator_source_excludes():
 
 def test_esgenerator_query_headless():
     query = {"query": {"match": {"baz.keyword": "test666"}}}
-    expected =  {"foo": 666,
-                 "bar": 1000-666,
-                 "baz": "test666"
-                 }
+    expected = {"foo": 666,
+                "bar": 1000-666,
+                "baz": "test666"
+                }
 
     for n, record in enumerate(es2json.esgenerator(host=host,
                                                     port=port,
