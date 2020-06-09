@@ -21,7 +21,7 @@ setup(name='es2json',
           'elasticsearch>=5.0.0',
           'httplib2>=0.17.0'
       ],
-      python_requires=">=3.6.*",
+      python_requires=">=3.5.*",
       entry_points={
           "console_scripts": ["es2json=es2json.es2json:run"]
           }
