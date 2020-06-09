@@ -121,7 +121,7 @@ class ES_wrapper:
                 kwargs['_source_exclude'] = kwargs.pop('_source_excludes')
             if '_source_includes' in kwargs:
                 kwargs['_source_include'] = kwargs.pop('_source_includes')
-        if server_version >= 7 and "doc_type" in kwargs: #  doc_type obsolete after Major Version 7
+        if server_version >= 7 and "doc_type" in kwargs and action in ("mget", "search"): #  doc_type obsolete after Major Version 7 for search and mget
             kwargs.pop("doc_type")
         return getattr(es, action)(**kwargs)
 
