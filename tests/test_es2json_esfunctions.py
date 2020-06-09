@@ -109,7 +109,7 @@ def test_esgenerator_query_headless():
                                                     type=test_doctype,
                                                     body=query,
                                                     headless=True)):
-        
+
         assert record == expected
 
 
@@ -214,3 +214,27 @@ def test_eidfileconsumegenerator_missing_ids():
         for ppn in inp:
             assert ppn.rstrip() not in found_ids
     os.remove(fd)
+
+def test_esfatgenerator():
+    expected_records = []
+    records = []
+    for fatrecords in es2json.esfatgenerator(host=host,
+                                                   port=port,
+                                                   index=testindex,
+                                                   type=test_doctype):
+        for n, record in enumerate(fatrecords):
+            expected_records.append({"_index": "test",
+                    "_type": "_doc",
+                    "_id": str(n),
+                    "_score": 1.0,
+                    "_source": {
+                        "foo": n,
+                        "bar": 1000-n,
+                        "baz": "test{}".format(n)
+                        }
+                    })
+            records.append(record)
+    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
+    records_sorted = sorted(records, key=lambda k: k["_id"])
+    assert records_sorted == expected_sorted
+    

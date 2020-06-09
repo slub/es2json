@@ -121,6 +121,8 @@ class ES_wrapper:
                 kwargs['_source_exclude'] = kwargs.pop('_source_excludes')
             if '_source_includes' in kwargs:
                 kwargs['_source_include'] = kwargs.pop('_source_includes')
+        if server_version >= 7 and "doc_type" in kwargs: #  doc_type obsolete after Major Version 7
+            kwargs.pop("doc_type")
         return getattr(es, action)(**kwargs)
 
     @staticmethod
@@ -170,7 +172,7 @@ def esfatgenerator(host=None,
                                scroll='12h',
                                size=chunksize,
                                body=body,
-                               source=source,
+                               _source=source,
                                _source_excludes=source_excludes,
                                _source_includes=source_includes,
                                request_timeout=timeout)
