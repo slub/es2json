@@ -71,6 +71,16 @@ def put_dict(url, dictionary):
     )
 
 
+def return_doc(record, hide_metadata, _id):
+    if hide_metadata and (record.get("_source") or record.get("found")):
+        return record["_source"]
+    elif (record.get("_source") or record.get("found")):
+        return record
+    else:
+        eprint("not found: {}".format(_id))
+        return None
+
+
 def ArrayOrSingleValue(array):
     '''
     return an array
@@ -236,10 +246,14 @@ def esgenerator(host=None,
                                      id=id,
                                      _source_excludes=source_excludes,
                                      _source_includes=source_includes)
-            if headless:
-                yield record["_source"]
-            else:
-                yield record
+            doc = return_doc(record=record, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
+            if doc:
+                yield doc
             return
         page = ES_wrapper.call(es,
                                'search',
@@ -261,10 +275,14 @@ def esgenerator(host=None,
         exit(-1)
     sid = page['_scroll_id']
     for hits in page['hits']['hits']:
-        if headless:
-            yield hits['_source']
-        else:
-            yield hits
+        doc = return_doc(record=hits, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=hits['_index'],
+                                       t=hits['_type'],
+                                       id=hits['_id']))
+        if doc:
+            yield doc
     while (scroll_size > 0):
         pages = ES_wrapper.call(es,
                                 'scroll',
@@ -280,10 +298,14 @@ def esgenerator(host=None,
             eprint("{}/{}".format(progress, total_size))
             progress += chunksize
         for hits in pages['hits']['hits']:
-            if headless:
-                yield hits['_source']
-            else:
-                yield hits
+            doc = return_doc(record=hits, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=hits['_index'],
+                                       t=hits['_type'],
+                                       id=hits['_id']))
+            if doc:
+                yield doc
 
 
 def esidfilegenerator(host=None,
@@ -360,10 +382,14 @@ def esidfilegenerator(host=None,
                                        headless=False,
                                        timeout=timeout,
                                        verbose=False):
-                    if headless:
-                        yield doc.get("_source")
-                    else:
-                        yield doc
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
+                    if rdoc:
+                        yield rdoc
             del ids[:chunksize]
         else:
             searchbody = {'ids': ids[:chunksize]}
@@ -377,10 +403,14 @@ def esidfilegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless:
-                        yield doc["_source"]
-                    else:
-                        yield doc
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
+                    if rdoc:
+                        yield rdoc
                 del ids[:chunksize]
             except elasticsearch.exceptions.NotFoundError:
                 traceback.print_exc()
@@ -414,17 +444,14 @@ def esidfilegenerator(host=None,
                                        headless=False,
                                        timeout=timeout,
                                        verbose=False):
-                    if headless and doc["found"]:
-                        yield doc["_source"]
-                    elif doc["found"]:
-                        yield doc
-                    else:
-                        eprint("not found: {h}:{p}/{i}/{t}/{id}"
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
                                .format(h=host,
                                        p=port,
                                        i=doc['_index'],
                                        t=doc['_type'],
                                        id=doc['_id']))
+                    if rdoc:
+                        yield rdoc
             del ids[:]
         else:
             searchbody = {'ids': ids}
@@ -438,18 +465,15 @@ def esidfilegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless and doc["found"]:
-                        yield doc["_source"]
-                    elif doc["found"]:
-                        yield doc
-                    else:
-                        eprint("not found: {h}:{p}/{i}/{t}/{id}"
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
                                .format(h=host,
                                        p=port,
                                        i=doc['_index'],
                                        t=doc['_type'],
                                        id=doc['_id']))
-                    del ids[:]
+                    if rdoc:
+                        yield rdoc
+                del ids[:]
             except elasticsearch.exceptions.NotFoundError:
                 eprint("not found: {h}:{p}/{i}/{t}/_search"
                        .format(h=host, p=port, i=index, t=type))
@@ -509,12 +533,14 @@ def esidfileconsumegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless and doc["found"]:
-                        yield doc.get("_source")
-                    elif doc["found"]:
-                        yield doc
-                    elif not doc["found"]:
-                        notfound_ids.add(doc["_id"])
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
+                    if rdoc:
+                        yield rdoc
                 del list_ids[:chunksize]
             if len(list_ids) > 0:
                 docs = ES_wrapper.call(es,
@@ -526,12 +552,14 @@ def esidfileconsumegenerator(host=None,
                                        _source_excludes=source_excludes,
                                        _source=source)["docs"]
                 for doc in docs:
-                    if headless and doc["found"]:
-                        yield doc.get("_source")
-                    elif doc["found"]:
-                        yield doc
-                    elif not doc["found"]:
-                        notfound_ids.add(doc["_id"])
+                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
+                               .format(h=host,
+                                       p=port,
+                                       i=doc['_index'],
+                                       t=doc['_type'],
+                                       id=doc['_id']))
+                    if rdoc:
+                        yield rdoc
                 del list_ids[:]
         except elasticsearch.exceptions.NotFoundError:
             eprint("notfound")
