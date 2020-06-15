@@ -131,7 +131,7 @@ class ES_wrapper:
                 kwargs['_source_exclude'] = kwargs.pop('_source_excludes')
             if '_source_includes' in kwargs:
                 kwargs['_source_include'] = kwargs.pop('_source_includes')
-        if server_version >= 7 and "doc_type" in kwargs and action in ("mget", "search"): #  doc_type obsolete after Major Version 7 for search and mget
+        if server_version >= 7 and "doc_type" in kwargs and action in ("mget", "search"):  # doc_type obsolete after Major Version 7 for search and mget
             kwargs.pop("doc_type")
         return getattr(es, action)(**kwargs)
 
@@ -249,9 +249,9 @@ def esgenerator(host=None,
             doc = return_doc(record=record, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
                                .format(h=host,
                                        p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
+                                       i=record['_index'],
+                                       t=record['_type'],
+                                       id=record['_id']))
             if doc:
                 yield doc
             return
