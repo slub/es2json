@@ -204,6 +204,13 @@ def esfatgenerator(host=None,
         sid = pages['_scroll_id']
         scroll_size = len(pages['hits']['hits'])
         yield pages['hits']['hits']
+    # cleaning up elasticsearch scroll id, generated problems in elasticsearch7
+    if sid:
+        ES_wrapper.call(es,
+                        'delete',
+                        index='_search',
+                        doc_type='scroll',
+                        id=sid)
 
 
 def esgenerator(host=None,
@@ -306,6 +313,13 @@ def esgenerator(host=None,
                                        id=hits['_id']))
             if doc:
                 yield doc
+    # cleaning up elasticsearch scroll id, generated problems in elasticsearch7
+    if sid:
+        ES_wrapper.call(es,
+                        'delete',
+                        index='_search',
+                        doc_type='scroll',
+                        id=sid)
 
 
 def esidfilegenerator(host=None,
