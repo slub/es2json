@@ -384,7 +384,6 @@ def esidfilegenerator(host=None,
             }
             for _id in ids[:chunksize]:
                 searchbody["query"]["bool"]["must"][1]["match"] = {"_id": _id}
-                eprint(json.dumps(searchbody))
                 for doc in esgenerator(host=host,
                                        port=port,
                                        index=index,
