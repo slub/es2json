@@ -72,9 +72,9 @@ def put_dict(url, dictionary):
 
 
 def return_doc(record, hide_metadata, _id):
-    if hide_metadata and (record.get("_source") or record.get("found")):
+    if hide_metadata and ("_source" in record or record.get("found")):
         return record["_source"]
-    elif (record.get("_source") or record.get("found")):
+    elif ("_source" in record or record.get("found")):
         return record
     else:
         eprint("not found: {}".format(_id))
