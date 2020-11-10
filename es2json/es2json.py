@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import json
 import elasticsearch
+import elasticsearch_dsl
 import argparse
 import logging
 import sys
@@ -71,16 +72,6 @@ def put_dict(url, dictionary):
     )
 
 
-def return_doc(record, hide_metadata, _id):
-    if hide_metadata and ("_source" in record or record.get("found")):
-        return record["_source"]
-    elif ("_source" in record or record.get("found")):
-        return record
-    else:
-        eprint("not found: {}".format(_id))
-        return None
-
-
 def ArrayOrSingleValue(array):
     '''
     return an array
@@ -146,444 +137,279 @@ class ES_wrapper:
             return mapping[index]["mappings"]["properties"]
 
 
-def esfatgenerator(host=None,
-                   port=9200,
-                   index=None,
-                   type=None,
-                   chunksize=1000,
-                   body=None,
-                   source=True,
-                   source_excludes=None,
-                   source_includes=None,
-                   timeout=10):
-    '''
-    dumps elasticsearch indices (or restricted by search body),
-    dumps whole search pages per yield
-    useful for further use by multiprocessesed tasks
-    '''
-    if not source:
-        source = True
-    es = elasticsearch.Elasticsearch(
-        [{
-          'host': host,
-          'port': port,
-          'timeout': timeout,
-          'max_retries': 10,
-          'retry_on_timeout': True,
-          'http_compress': True
-        }]
-        )
-    server_version = es.info()['version']['number']
-    try:
-        page = ES_wrapper.call(es,
-                               'search',
-                               index=index,
-                               doc_type=type,
-                               scroll='12h',
-                               size=chunksize,
-                               body=body,
-                               _source=source,
-                               _source_excludes=source_excludes,
-                               _source_includes=source_includes,
-                               request_timeout=timeout)
-        if int(server_version[0]) < 7:
-            scroll_size = page['hits']['total']
-        elif int(server_version[0]) >= 7:
-            scroll_size = page['hits']['total']["value"]
-    except elasticsearch.exceptions.NotFoundError:
-        eprint("not found: {h}:{p}/{i}/{t}/_search"
-               .format(h=host, p=port, i=index, t=type))
-        exit(-1)
-    sid = page['_scroll_id']
-    yield page['hits']['hits']
-    while (scroll_size > 0):
-        pages = ES_wrapper.call(es,
-                                'scroll',
-                                scroll_id=sid,
-                                scroll='12h')
-        sid = pages['_scroll_id']
-        scroll_size = len(pages['hits']['hits'])
-        yield pages['hits']['hits']
-    # cleaning up elasticsearch scroll id, generated problems in elasticsearch7
-    if sid:
-        ES_wrapper.call(es,
-                        'delete',
-                        index='_search',
-                        doc_type='scroll',
-                        id=sid)
+class ESGenerator:
+    """
+    wrapper for esgenerator() to submit a list of ids or a file with ids
+    to reduce the searchwindow on
+    """
+    es = None
+    source = None
+    chunksize = None
+    headless = False
+    index = None
+    doc_type = None
+    id = None
+    body = None
+    source_excludes = None
+    source_includes = None
+    verbose = True
+    progress = 0
 
+    def __init__(self, host=None,
+                 port=9200,
+                 index=None,
+                 type=None,
+                 id=None,
+                 body=None,
+                 source=True,
+                 excludes=None,
+                 includes=None,
+                 headless=False,
+                 chunksize=1000,
+                 timeout=10,
+                 verbose=True):
+        self.es = elasticsearch.Elasticsearch(
+            [{
+            'host': host,
+            'port': port,
+            'timeout': timeout,
+            'max_retries': 10,
+            'retry_on_timeout': True,
+            'http_compress': True
+            }]
+            )
+        if source:
+            self.source = source
+        self.chunksize = chunksize
+        self.headless = headless
+        self.index = index
+        self.doc_type = type
+        self.source_excludes = excludes
+        self.source_includes = includes
+        self.body = body
+        self.verbose = verbose
 
-def esgenerator(host=None,
-                port=9200,
-                index=None,
-                type=None,
-                id=None,
-                chunksize=1000,
-                body=None,
-                source=True,
-                source_excludes=None,
-                source_includes=None,
-                headless=False,
-                timeout=10,
-                verbose=False):
-    '''
-    dumps elasticsearch indices (or restricted by search body),
-    dumps single records per yield
-    '''
-    progress = chunksize
-    if not source:
-        source = True
-    es = elasticsearch.Elasticsearch(
-        [{
-          'host': host,
-          'port': port,
-          'timeout': timeout,
-          'max_retries': 10,
-          'retry_on_timeout': True,
-          'http_compress': True
-        }]
-        )
-    server_version = es.info()['version']['number']
-    try:
-        if id:
-            record = ES_wrapper.call(es,
-                                     'get',
-                                     index=index,
-                                     doc_type=type,
-                                     id=id,
-                                     _source_excludes=source_excludes,
-                                     _source_includes=source_includes)
-            doc = return_doc(record=record, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=record['_index'],
-                                       t=record['_type'],
-                                       id=record['_id']))
+    def return_doc(self, record, hide_metadata, meta, source):
+        """
+        prints out the elasticsearch record defined by user input
+        if source is False, only metadata fields are printed out
+        if headless is true, metadata also gets printed out
+        also rewrites the metadata fields back to NonPythonic Elasticsearch Standard
+        see elasticsearch_dsl.utils.py::ObjectBase(AttrDict)__init__.py
+        """
+        if hide_metadata and not source:
+            eprint("ERROR! do not use -headless and -source False!")
+            exit(-1)
+        elif hide_metadata:
+            return record
+        else:
+            for key in elasticsearch_dsl.utils.META_FIELDS:
+                if key in meta:
+                    meta["_{}".format(key)] = meta.pop(key)
+            if "doc_type" in meta:
+                meta["_type"] = meta.pop("doc_type")
+            meta["source"] = {}
+            if source:
+                meta["_source"] = record
+            return meta
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def generator(self):
+        if self.id:
+            s = elasticsearch_dsl.Document.get(using=self.es, index=self.index, id=self.id, _source_excludes=self.source_excludes, _source_includes=self.source_includes, _source=self.source)
+            doc = self.return_doc(record=s.to_dict(), hide_metadata=self.headless, meta=s.meta.to_dict(), source=self.source)
             if doc:
                 yield doc
             return
-        page = ES_wrapper.call(es,
-                               'search',
-                               index=index,
-                               doc_type=type,
-                               scroll='12h',
-                               size=chunksize,
-                               body=body,
-                               _source=source,
-                               _source_excludes=source_excludes,
-                               _source_includes=source_includes)
-        if int(server_version[0]) < 7:
-            scroll_size = page['hits']['total']
-        elif int(server_version[0]) >= 7:
-            scroll_size = page['hits']['total']["value"]
-    except elasticsearch.exceptions.NotFoundError:
-        eprint("not found: {h}:{p}/{i}/{t}/_search"
-               .format(h=host, p=port, i=index, t=type))
-        exit(-1)
-    sid = page['_scroll_id']
-    for hits in page['hits']['hits']:
-        doc = return_doc(record=hits, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=hits['_index'],
-                                       t=hits['_type'],
-                                       id=hits['_id']))
-        if doc:
-            yield doc
-    while (scroll_size > 0):
-        pages = ES_wrapper.call(es,
-                                'scroll',
-                                scroll_id=sid,
-                                scroll='12h')
-        sid = pages['_scroll_id']
-        scroll_size = len(pages['hits']['hits'])
-        if int(server_version[0]) < 7:
-            total_size = page['hits']['total']
-        elif int(server_version[0]) >= 7:
-            total_size = page['hits']['total']["value"]
-        if verbose:
-            eprint("{}/{}".format(progress, total_size))
-            progress += chunksize
-        for hits in pages['hits']['hits']:
-            doc = return_doc(record=hits, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=hits['_index'],
-                                       t=hits['_type'],
-                                       id=hits['_id']))
+        s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=type).source(excludes=self.source_excludes, includes=self.source_includes)
+        if self.body:
+            s = s.update_from_dict(self.body)
+        if self.verbose:
+            hits_total = s.count()
+        search = s.params(scroll='12h').scan()
+        for n, hit in enumerate(search):
+            doc = self.return_doc(record=hit.to_dict(), hide_metadata=self.headless, meta=hit.meta.to_dict(), source=self.source)
             if doc:
                 yield doc
-    # cleaning up elasticsearch scroll id, generated problems in elasticsearch7
-    if sid:
-        ES_wrapper.call(es,
-                        'delete',
-                        index='_search',
-                        doc_type='scroll',
-                        id=sid)
+            if self.verbose and (n+1)%self.chunksize==0 or n+1==hits_total:
+                eprint("{}/{}".format(n+1, hits_total))
 
 
-def esidfilegenerator(host=None,
-                      port=9200,
-                      index=None,
-                      type=None,
-                      body=None,
-                      source=True,
-                      source_excludes=None,
-                      source_includes=None,
-                      idfile=None,
-                      headless=False,
-                      chunksize=1000,
-                      timeout=10):
-    '''
-    dumps elasticsearch records, defined by an idfile or iterable object
-    dumps single records per yield
-    TODO: implement usage of functioning search querys, atm its very limited
-    '''
-    if not source:
-        source = True
-    tracer = logging.getLogger('elasticsearch')
-    tracer.setLevel(logging.WARNING)
-    tracer.addHandler(logging.FileHandler('errors.txt'))
-    es = elasticsearch.Elasticsearch(
-        [{
-          'host': host,
-          'port': port,
-          'timeout': timeout,
-          'max_retries': 10,
-          'retry_on_timeout': True,
-          'http_compress': True
-        }]
-        )
-    ids_set = set()
-    ids = list()
+class IDFile(ESGenerator):
+    """
+    wrapper for esgenerator() to submit a list of ids or a file with ids
+    to reduce the searchwindow on
+    """
+    iterable = None
+    idfile = None
+    ids = None
 
-    if isinstance(idfile, str) and isfile(idfile):
-        with open(idfile, "r") as inp:
+    def __init__(self,  idfile=None, **kwargs):
+        super().__init__(**kwargs)
+        self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
+        self.iterable = []  # an iterable containing all the IDs from idfile, not going to be reduced during runtime
+        self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime and for checks at the end if everything was found
+
+    def read_file(self):
+        ids_set = set()
+        if isinstance(self.idfile, str) and isfile(self.idfile):
+            with open(self.idfile, "r") as inp:
+                for ppn in inp:
+                    ids_set.add(ppn.rstrip())
+        elif isiter(self.idfile) and not isinstance(self.idfile, str) and not isfile(self.idfile):
+            for ppn in self.idfile:
+                ids_set.add(ppn.rstrip())
+        else:
+            raise AttributeError
+        self.iterable = list(ids_set)
+        self.ids = list(ids_set)
+
+    def write_file(self):
+        """
+        writing of idfile for the consume generator,
+        we instance this here to be used in generator() function, even if we don't use it in this parent class
+        at this point we just like to error-print every non missing ids
+        """
+        missing = list()
+        for item in self.ids:
+            if item not in self.iterable:
+                eprint("ID {} not found".format(item))
+
+    def __enter__(self):
+        self.read_file()
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def generator(self):
+        while len(self.ids) > 0:
+            if self.body:
+                for n,_id in enumerate(self.ids[:self.chunksize]):
+                    searchbody = elasticsearch_dsl.Search.from_dict(self.body).query("match", id=_id)
+                    with ESGenerator(host=self.host,
+                                     port=self.port,
+                                     index=self.index,
+                                     type=self.doc_type,
+                                     body=searchbody.to_dict(),
+                                     source=self.source,
+                                     excludes=self.source_excludes,
+                                     includes=self.source_includes,
+                                     headless=self.headless,
+                                     timeout=self.timeout,
+                                     verbose=False) as generatorObject:
+                        for hit in generatorObject:
+                            if hit:
+                                doc = self.return_doc(record=hit.to_dict(),
+                                         hide_metadata=self.headless,
+                                         meta=hit.meta.to_dict(),
+                                         source=self.source)
+                                yield doc
+                                del self.ids[n]
+            else:
+                s = elasticsearch_dsl.Document.mget(docs=self.ids[:self.chunksize],
+                                                    using=self.es,
+                                                    index=self.index,
+                                                    _source_excludes=self.source_excludes,
+                                                    _source_includes=self.source_includes,
+                                                    _source=self.source)
+                for hit in s:
+                    if hit:
+                        doc = self.return_doc(record=hit.to_dict(),
+                                         hide_metadata=self.headless,
+                                         meta=hit.meta.to_dict(),
+                                         source=self.source)
+                        yield doc
+                        del self.ids[self.ids.index(hit.meta.to_dict()["id"])]
+            if not self.ids:
+                self.ids = []
+        self.write_file()
+
+
+class IDFileConsume(IDFile):
+    """
+    same class like IDFile, but here we use the write_idfile function
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def read_file(self):
+        ids_set = set()
+        with open(self.idfile, "r") as inp:
             for ppn in inp:
-                _id = ppn.rstrip()
-                ids_set.add(_id)
-    elif isiter(idfile) and not isinstance(idfile, str) and not isfile(idfile):
-        for ppn in idfile:
-            ids_set.add(ppn.rstrip())
-    ids = list(ids_set)
-    while len(ids) >= chunksize:
-        if body and "query" in body and "match" in body["query"]:
-            searchbody = {
-                "query": {
-                    "bool": {
-                        "must": [
-                            {
-                                "match": body["query"]["match"]
-                            },
-                            {
-                                "match": {}
-                            }
-                        ]
-                    }
-                }
-            }
-            for _id in ids[:chunksize]:
-                searchbody["query"]["bool"]["must"][1]["match"] = {"_id": _id}
-                for doc in esgenerator(host=host,
-                                       port=port,
-                                       index=index,
-                                       type=type,
-                                       body=searchbody,
-                                       source=source,
-                                       source_excludes=source_excludes,
-                                       source_includes=source_includes,
-                                       headless=False,
-                                       timeout=timeout,
-                                       verbose=False):
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-            del ids[:chunksize]
-        else:
-            searchbody = {'ids': ids[:chunksize]}
-            try:
-                docs = ES_wrapper.call(es,
-                                       'mget',
-                                       index=index,
-                                       doc_type=type,
-                                       body=searchbody,
-                                       _source_includes=source_includes,
-                                       _source_excludes=source_excludes,
-                                       _source=source)["docs"]
-                for doc in docs:
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-                del ids[:chunksize]
-            except elasticsearch.exceptions.NotFoundError:
-                traceback.print_exc()
-    while len(ids) > 0:
-        if body and "query" in body and "match" in body["query"]:
-            searchbody = {
-                "query": {
-                    "bool": {
-                        "must": [
-                            {
-                                "match": body["query"]["match"]
-                            },
-                            {
-                                "match": {}
-                            }
-                        ]
-                    }
-                }
-            }
-            for _id in ids:
-                searchbody["query"]["bool"]["must"][1]["match"] = {"_id": _id}
-                # eprint(json.dumps(searchbody))
-                for doc in esgenerator(host=host,
-                                       port=port,
-                                       index=index,
-                                       type=type,
-                                       body=searchbody,
-                                       source=source,
-                                       source_excludes=source_excludes,
-                                       source_includes=source_includes,
-                                       headless=False,
-                                       timeout=timeout,
-                                       verbose=False):
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-            del ids[:]
-        else:
-            searchbody = {'ids': ids}
-            try:
-                docs = ES_wrapper.call(es,
-                                       'mget',
-                                       index=index,
-                                       doc_type=type,
-                                       body=searchbody,
-                                       _source_includes=source_includes,
-                                       _source_excludes=source_excludes,
-                                       _source=source)["docs"]
-                for doc in docs:
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-                del ids[:]
-            except elasticsearch.exceptions.NotFoundError:
-                eprint("not found: {h}:{p}/{i}/{t}/_search"
-                       .format(h=host, p=port, i=index, t=type))
+                ids_set.add(ppn.rstrip())
+        self.iterable = list(ids_set)
+        self.ids = list(ids_set)
+
+    def write_file(self):
+        """
+        overwriting __exit so this outputs a idfile f the consume generator with the missing ids (or none),
+        we instance this here to be used in generator() function, even if we don't use it in this parent class
+        at this point we just like to error-print every non missing ids
+        """
+        missing = list()
+        with open(self.idfile, "w") as outp:
+            if self.ids:
+                for item in self.ids:
+                    if item not in self.iterable:
+                        print(item, file=outp)
+            else:  # no ids missing in the cluster? alright, we clean up
+                os.remove(self.idfile)
 
 
-def esidfileconsumegenerator(host=None,
-                             port=9200,
-                             index=None,
-                             type=None,
-                             body=None,
-                             source=True,
-                             source_excludes=None,
-                             source_includes=None,
-                             idfile=None,
-                             headless=False,
-                             chunksize=1000,
-                             timeout=10):
-    '''
-    dumps elasticsearch records, defined by an idfile
-    dumps single records per yield
-    consumes the idfile, if all records are successfull transceived,
-    the idfile is going to be empty. if there is an error inbetween,
-    the idfile is going to be partly used for the successfull pages which are
-    printed, if the error occurs inbetween a page, the page will not be
-    successfull printed out completely, but will be purged from the idfile.
-    reduce chunksize parameter to reduce this error. but lesser chunksize is
-    also lesser performance
-    TODO: implement usage of functioning search querys, atm its very limited
-    '''
-    if isfile(idfile):
-        ids = set()
-        notfound_ids = set()
-        with open(idfile, "r") as inp:
-            for ppn in inp:
-                ids.add(ppn.rstrip())
-        list_ids = list(ids)
-        if not source:
-            source = True
-        tracer = logging.getLogger('elasticsearch')
-        tracer.setLevel(logging.WARNING)
-        tracer.addHandler(logging.FileHandler('errors.txt'))
-        es = elasticsearch.Elasticsearch([{'host': host,
-                                           'port': port,
-                                           'timeout': timeout,
-                                           'max_retries': 10,
-                                           'retry_on_timeout': True,
-                                           'http_compress': True
-                                           }])
-        try:
-            while len(list_ids) >= chunksize:
-                docs = ES_wrapper.call(es,
-                                       'mget',
-                                       index=index,
-                                       doc_type=type,
-                                       body={'ids': list_ids[:chunksize]},
-                                       _source_includes=source_includes,
-                                       _source_excludes=source_excludes,
-                                       _source=source)["docs"]
-                for doc in docs:
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-                del list_ids[:chunksize]
-            if len(list_ids) > 0:
-                docs = ES_wrapper.call(es,
-                                       'mget',
-                                       index=index,
-                                       doc_type=type,
-                                       body={'ids': list_ids},
-                                       _source_includes=source_includes,
-                                       _source_excludes=source_excludes,
-                                       _source=source)["docs"]
-                for doc in docs:
-                    rdoc = return_doc(record=doc, hide_metadata=headless, _id="{h}:{p}/{i}/{t}/{id}"
-                               .format(h=host,
-                                       p=port,
-                                       i=doc['_index'],
-                                       t=doc['_type'],
-                                       id=doc['_id']))
-                    if rdoc:
-                        yield rdoc
-                del list_ids[:]
-        except elasticsearch.exceptions.NotFoundError:
-            eprint("notfound")
-            notfound_ids.add(list_ids[:chunksize])
-        else:
-            os.remove(idfile)
-        finally:
-            list_ids += list(notfound_ids)
-            with open(idfile, "w") as outp:
-                for _id in list_ids:
-                    print(_id, file=outp)
+def esidfileconsumegenerator(**kwargs):
+    """
+    wrapper function for deprecated es2json API calls
+    """
+    with IDFileConsume(**kwargs) as generator:
+        for record in generator.generator():
+            yield record
+
+
+def esidfilegenerator(**kwargs):
+    """
+    wrapper function for deprecated es2json API calls
+    """
+    with IDFile(**kwargs) as generator:
+        for record in generator.generator():
+            yield record
+
+
+def esgenerator(**kwargs):
+    """
+    wrapper function for deprecated es2json API calls
+    """
+    for item in ("includes", "excludes"):
+        if kwargs.get("source_{}".format(item)):
+            kwargs[item] = kwargs.pop("source_{}".format(item))
+    with ESGenerator(**kwargs) as generator:
+        for record in generator.generator():
+            yield record
+
+
+def esfatgenerator(**kwargs):
+    """
+    HIGHLY DEPRECATED !!! do not use !!! only kept in here to not break old python tools
+    workaround wrapper function for deprecated es2json API calls
+    """
+    kwargs["headless"] = False
+    if not kwargs.get("chunksize"):
+        kwargs["chunksize"] = 1000
+    chunks = []
+    with ESGenerator(**kwargs) as generator:
+        for record in enumerate(generator.generator()):
+            chunks.append(record)
+            if len(chunks) == kwargs["chunksize"]:
+                yield chunks
+                chunks = []
+    if chunks:
+        yield chunks
+                
 
 
 def litter(lst, elm):
@@ -618,6 +444,20 @@ def litter(lst, elm):
             return lst
 
 
+def str2bool(v):
+    """
+    https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+    """
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1', "none"):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def run():
     parser = argparse.ArgumentParser(description='Elasticsearch to JSON')
     parser.add_argument('-host', type=str, default="127.0.0.1",
@@ -629,26 +469,30 @@ def run():
                         help='ElasticSearch Search Index to use')
     parser.add_argument('-type', type=str,
                         help='ElasticSearch Search Index Type to use')
-    parser.add_argument('-source', type=str, help='just return this field(s)')
+    parser.add_argument('-source', type=str2bool, nargs='?',
+                        const=True, default=True,
+                        help='return the Document or just the Elasticsearch-Metadata')
+    parser.add_argument('-fat', type=str2bool, nargs='?',
+                        const=True, default=True,
+                        help='use the fatgenerator to get whole elasticsearch pagechunks')
     parser.add_argument("-includes", type=str,
-                        help="include following _source field(s)")
+                        help="just include following _source field(s) in the _source object")
     parser.add_argument("-excludes", type=str,
-                        help="exclude following _source field(s)")
+                        help="exclude following _source field(s) from the _source object")
     parser.add_argument(
         "-id", type=str, help="retrieve single document (optional)")
-    parser.add_argument("-headless", action="store_true",
-                        default=False, help="don't print Elasticsearch metadata")
+    parser.add_argument("-headless", type=str2bool, nargs='?',
+                        const=True, default=True, help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=json.loads, help='Searchbody')
     # no, i don't steal the syntax from esbulk...
-    parser.add_argument(
-        '-server', type=str, help="use http://host:port/index/type/id?pretty. "
+    parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
         "overwrites host/port/index/id/pretty")
     parser.add_argument(
         '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
-    parser.add_argument('-pretty', action="store_true",
-                        default=False, help="prettyprint")
+    parser.add_argument('-pretty', type=str2bool, nargs='?',
+                        const=True, default=False, help="prettyprint")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
     args = parser.parse_args()
@@ -670,67 +514,24 @@ def run():
         tabbing = 4
     else:
         tabbing = None
+    kwargs_generator = dict(**vars(args))
+    kwargs_generator.pop("server")
+    kwargs_generator.pop("pretty")
+    kwargs_generator.pop("fat")
     if args.idfile:
-        for json_record in esidfilegenerator(host=args.host,
-                                             port=args.port,
-                                             index=args.index,
-                                             type=args.type,
-                                             body=args.body,
-                                             source=args.source,
-                                             headless=args.headless,
-                                             source_excludes=args.excludes,
-                                             source_includes=args.includes,
-                                             idfile=args.idfile,
-                                             chunksize=args.chunksize):
-            print(json.dumps(json_record, indent=tabbing))
+        ESGeneratorFunction = IDFile(**kwargs_generator).generator()
     elif args.idfile_consume:
-        for json_record in esidfileconsumegenerator(host=args.host,
-                                                    port=args.port,
-                                                    index=args.index,
-                                                    type=args.type,
-                                                    body=args.body,
-                                                    source=args.source,
-                                                    headless=args.headless,
-                                                    source_excludes=args.excludes,
-                                                    source_includes=args.includes,
-                                                    idfile=args.idfile_consume,
-                                                    chunksize=args.chunksize):
-            print(json.dumps(json_record, indent=tabbing))
-    elif not args.id:
-        for json_record in esgenerator(host=args.host,
-                                       port=args.port,
-                                       index=args.index,
-                                       type=args.type,
-                                       body=args.body,
-                                       source=args.source,
-                                       headless=args.headless,
-                                       source_excludes=args.excludes,
-                                       source_includes=args.includes,
-                                       verbose=True,
-                                       chunksize=args.chunksize):
-            print(json.dumps(json_record, indent=tabbing))
+        kwargs_generator["idfile"] = kwargs_generator.pop("idfile_consume")
+        ESGeneratorFunction = IDFileConsume(**kwargs_generator).generator()
     else:
-        es = elasticsearch.Elasticsearch(
-            [{
-                'host': args.host,
-                'port': args.port,
-                'max_retries': 10,
-                'retry_on_timeout': True,
-                'http_compress': True
-            }]
-        )
-        json_record = ES_wrapper.call(es,
-                                      'get',
-                                      index=args.index,
-                                      doc_type=args.type,
-                                      _source=True,
-                                      _source_excludes=args.excludes,
-                                      _source_includes=args.includes,
-                                      id=args.id)
-        if json_record and args.headless:
-            print(json.dumps(json_record["_source"], indent=tabbing))
-        elif json_record and not args.headless:
-            print(json.dumps(json_record, indent=tabbing))
+        kwargs_generator.pop("idfile")
+        kwargs_generator.pop("idfile_consume")
+        if args.fat:
+            ESGeneratorFunction = esfatgenerator(**kwargs_generator)
+        else:
+            ESGeneratorFunction = ESGenerator(**kwargs_generator).generator()
+    for json_record in ESGeneratorFunction:
+        print(json.dumps(json_record, indent=tabbing))
 
 
 if __name__ == "__main__":
