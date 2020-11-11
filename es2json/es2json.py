@@ -139,8 +139,7 @@ class ES_wrapper:
 
 class ESGenerator:
     """
-    wrapper for esgenerator() to submit a list of ids or a file with ids
-    to reduce the searchwindow on
+    Main generator Object where other Generators inherit from
     """
     es = None
     source = False
