@@ -2,239 +2,194 @@ import es2json
 import json
 import uuid
 import os
+import gzip
+from copy import deepcopy
 
-host = "localhost"
-port = 9200
-testindex = "test"
-test_doctype = "_doc"
+default_kwargs = {
+    "host": "localhost",
+    "port": 9200,
+    "index": "test",
+    "type": "_doc",
+}
 
-def test_esgenerator():
-    expected_records = []
-    records = []
-    for n, record in enumerate(es2json.esgenerator(host=host,
-                                                   port=port,
-                                                   index=testindex,
-                                                   type=test_doctype)):
-        expected_records.append({"_index": "test",
-                    "_type": "_doc",
-                    "_id": str(n),
-                    "_score": 1.0,
-                    "_source": {
-                        "foo": n,
-                        "bar": 1000-n,
-                        "baz": "test{}".format(n)
+MAX = 1000
+
+default_returnrecord = {"sort": None,
+                        "_index": "test",
+                        "_score": None,
+                        "_type": "_doc",
+                        "_source": {}
                         }
-                    })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
-    records_sorted = sorted(records, key=lambda k: k["_id"])
-    assert records_sorted == expected_sorted
+
+
+testdata = []
+with gzip.open("tests/testdata.ldj.gz", "rt") as inp:
+    for line in inp:
+        testdata.append(json.loads(line))
+
+
+def test_esgenerator(**kwargs):
+    expected_records = []
+    for n, record in enumerate(testdata):
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_source"] = record
+        retrecord["_id"] = str(n)
+        retrecord['sort'] = [n]
+        expected_records.append(dict(sorted(retrecord.items())))
+    records = []
+    with es2json.ESGenerator(**default_kwargs, **kwargs) as es:
+        for n, record in enumerate(es.generator()):
+            records.append(dict(sorted(record.items())))
+
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_esgenerator_NoneSource():
     expected_records = []
+    for n, record in enumerate(testdata):
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_id"] = str(n)
+        retrecord['sort'] = [n]
+        expected_records.append(dict(sorted(retrecord.items())))
     records = []
-    for n, record in enumerate(es2json.esgenerator(host=host,
-                                                   port=port,
-                                                   index=testindex,
-                                                   type=test_doctype,
-                                                   source="None")):
-        expected_records.append({"_index": "test",
-                    "_type": "_doc",
-                    "_id": str(n),
-                    "_score": 1.0,
-                    "_source": {}
-                    })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
-    records_sorted = sorted(records, key=lambda k: k["_id"])
-    assert records_sorted == expected_sorted
+    with es2json.ESGenerator(source=False, **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_esgenerator_source_includes():
+    includes = ["foo"]
     expected_records = []
+    for n, record in enumerate(testdata):
+        retrecord = deepcopy(default_returnrecord)
+        for item in includes:
+            retrecord["_source"][item] = record[item]
+        retrecord["_id"] = str(n)
+        retrecord['sort'] = [n]
+        expected_records.append(dict(sorted(retrecord.items())))
     records = []
-    for n, record in enumerate(es2json.esgenerator(host=host,
-                                                   port=port,
-                                                   index=testindex,
-                                                   type=test_doctype,
-                                                   source_includes="foo")):
-        expected_records.append({"_index": "test",
-                    "_type": "_doc",
-                    "_id": str(n),
-                    "_score": 1.0,
-                    "_source": {
-                        "foo": n
-                        }
-                    })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k['_id'])
-    records_sorted = sorted(records, key=lambda k: k['_id'])
-    assert records_sorted == expected_sorted
+    with es2json.ESGenerator(includes=includes, **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_esgenerator_source_excludes():
     expected_records = []
+    for n in range(0, MAX):
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_id"] = str(n)
+        retrecord["_source"]["foo"] = n
+        retrecord["_source"]["baz"] = "test{}".format(n)
+        retrecord['sort'] = [n]
+        expected_records.append(dict(sorted(retrecord.items())))
     records = []
-    for n, record in enumerate(es2json.esgenerator(host=host,
-                                                   port=port,
-                                                   index=testindex,
-                                                   type=test_doctype,
-                                                   source_excludes="bar")):
-        expected_records.append({"_index": "test",
-                    "_type": "_doc",
-                    "_id": str(n),
-                    "_score": 1.0,
-                    "_source": {
-                        "foo": n,
-                        "baz": "test{}".format(n)
-                        }
-                    })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k['_id'])
-    records_sorted = sorted(records, key=lambda k: k['_id'])
-    assert records_sorted == expected_sorted
+    with es2json.ESGenerator(excludes="bar", **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_esgenerator_query_headless():
     query = {"query": {"match": {"baz.keyword": "test666"}}}
-    expected = {"foo": 666,
-                "bar": 1000-666,
-                "baz": "test666"
-                }
-
-    for n, record in enumerate(es2json.esgenerator(host=host,
-                                                    port=port,
-                                                    index=testindex,
-                                                    type=test_doctype,
-                                                    body=query,
-                                                    headless=True)):
-
-        assert record == expected
+    with es2json.ESGenerator(body=query, headless=True, **default_kwargs) as es:
+        for record in es.generator():
+            assert record == {"foo": 666, "bar": MAX-666, "baz": "test666"}
 
 
 def test_esidfilegenerator_iterable():
-    ids = [str(x) for x in range(200,300)]
     expected_records = []
+    ids = []
+    for n in range(200, 300):
+        retrecord = deepcopy(default_returnrecord["_source"])
+        retrecord["foo"] = n
+        retrecord["baz"] = "test{}".format(n)
+        retrecord["bar"] = MAX-n
+        expected_records.append(dict(sorted(retrecord.items())))
+        ids.append(str(n))
     records = []
-    for n, record in enumerate(es2json.esidfilegenerator(host=host,
-                                                         port=port,
-                                                         index=testindex,
-                                                         type=test_doctype,
-                                                         headless=True,
-                                                         idfile=ids)):
-        expected_records.append({"foo": 200+n,
-                                 "bar": 800-n,
-                                 "baz": "test{}".format(200+n)
-                                 })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k['foo'])
-    records_sorted = sorted(records, key=lambda k: k['foo'])
-
-    assert records_sorted == expected_sorted
+    with es2json.IDFile(idfile=ids, headless=True, **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_esidfilegenerator_file():
-    ids = [str(x) for x in range(200,300)]
     fd = str(uuid.uuid4())
-    with open(fd,"w") as outp:
-        for _id in ids:
-            print(_id,file=outp)
     expected_records = []
+    with open(fd, "w") as outp:
+        for n in range(200, 300):
+            retrecord = deepcopy(default_returnrecord)
+            retrecord["_id"] = str(n)
+            retrecord["_source"]["foo"] = n
+            retrecord["_source"]["baz"] = "test{}".format(n)
+            retrecord["_source"]["bar"] = MAX-n
+            expected_records.append(dict(sorted(retrecord.items())))
+            print(n, file=outp)
     records = []
-    for n, record in enumerate(es2json.esidfilegenerator(host=host,
-                                                         port=port,
-                                                         index=testindex,
-                                                         type=test_doctype,
-                                                         headless=True,
-                                                         idfile=fd)):
-        expected_records.append({"foo": 200+n,
-                                 "bar": 800-n,
-                                 "baz": "test{}".format(200+n)
-                                 })
-        records.append(record)
+    with es2json.IDFile(idfile=fd, **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
     os.remove(fd)
-    expected_sorted = sorted(expected_records, key=lambda k: k['foo'])
-    records_sorted = sorted(records, key=lambda k: k['foo'])
-    
-    assert records_sorted == expected_sorted
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
 def test_eidfileconsumegenerator():
-    ids = [str(x) for x in range(200,300)]
     fd = str(uuid.uuid4())
-    with open(fd,"w") as outp:
-        for _id in ids:
-            print(_id,file=outp)
     expected_records = []
+    with open(fd, "w") as outp:
+        for n in range(200, 300):
+            retrecord = deepcopy(default_returnrecord)
+            retrecord["_id"] = str(n)
+            retrecord["_source"]["foo"] = n
+            retrecord["_source"]["baz"] = "test{}".format(n)
+            retrecord["_source"]["bar"] = MAX-n
+            expected_records.append(dict(sorted(retrecord.items())))
+            print(n, file=outp)
     records = []
-    for n, record in enumerate(es2json.esidfileconsumegenerator(host=host,
-                                                         port=port,
-                                                         index=testindex,
-                                                         type=test_doctype,
-                                                         headless=True,
-                                                         idfile=fd)):
-        expected_records.append({"foo": 200+n,
-                                 "bar": 800-n,
-                                 "baz": "test{}".format(200+n)
-                                 })
-        records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k['foo'])
-    records_sorted = sorted(records, key=lambda k: k['foo'])
-    
-    assert records_sorted == expected_sorted
-    assert os.stat(fd).st_size == 0
-    os.remove(fd)
-
+    with es2json.IDFileConsume(idfile=fd, **default_kwargs) as es:
+        for record in es.generator():
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+    assert es2json.isfile(fd) is False
 
 
 def test_eidfileconsumegenerator_missing_ids():
-    ids = [str(x) for x in range(900,1100)]
     fd = str(uuid.uuid4())
-    missing_ids = set()
-    found_ids = set()
-    with open(fd,"w") as outp:
-        for _id in ids:
-            print(_id,file=outp)
     expected_records = []
-    for n in range(900,1000):
-        expected_records.append({"foo": n,
-                                 "bar": 1000-n,
-                                 "baz": "test{}".format(n)
-                                 })
-    for record in es2json.esidfilegenerator(host=host,
-                                                         port=port,
-                                                         index=testindex,
-                                                         type=test_doctype,
-                                                         headless=True,
-                                                         idfile=fd):
-        found_ids.add(record["foo"])
-        assert record in expected_records
+    found_ids = set()
+    with open(fd, "w") as outp:
+        for n in range(MAX-100, MAX+200):
+            print(n,file=outp)
+            if n < 1000: # we don't expect more than 1000
+                retrecord = deepcopy(default_returnrecord)
+                retrecord["_id"] = str(n)
+                retrecord["_source"]["foo"] = n
+                retrecord["_source"]["baz"] = "test{}".format(n)
+                retrecord["_source"]["bar"] = MAX-n
+                expected_records.append(dict(sorted(retrecord.items())))
+    with es2json.IDFileConsume(idfile=fd, **default_kwargs) as es:
+        for record in es.generator():
+            found_ids.add(record["_id"])
+            assert dict(sorted(record.items())) in expected_records
     with open(fd, "r") as inp:
         for ppn in inp:
             assert ppn.rstrip() not in found_ids
     os.remove(fd)
 
+
 def test_esfatgenerator():
     expected_records = []
+    for n in range(0, MAX):
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_id"] = str(n)
+        retrecord["_source"]["foo"] = n
+        retrecord["_source"]["bar"] = MAX-n
+        retrecord["_source"]["baz"] = "test{}".format(n)
+        expected_records.append(dict(sorted(retrecord.items())))
     records = []
-    for fatrecords in es2json.esfatgenerator(host=host,
-                                                   port=port,
-                                                   index=testindex,
-                                                   type=test_doctype):
-        for n, record in enumerate(fatrecords):
-            expected_records.append({"_index": "test",
-                    "_type": "_doc",
-                    "_id": str(n),
-                    "_score": 1.0,
-                    "_source": {
-                        "foo": n,
-                        "bar": 1000-n,
-                        "baz": "test{}".format(n)
-                        }
-                    })
-            records.append(record)
-    expected_sorted = sorted(expected_records, key=lambda k: k["_id"])
-    records_sorted = sorted(records, key=lambda k: k["_id"])
-    assert records_sorted == expected_sorted
-    
+    for fatrecords in es2json.esfatgenerator(**default_kwargs):
+        for record in fatrecords:
+            records.append(dict(sorted(record.items())))
+    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])

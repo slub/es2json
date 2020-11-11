@@ -143,7 +143,7 @@ class ESGenerator:
     to reduce the searchwindow on
     """
     es = None
-    source = None
+    source = False
     chunksize = None
     headless = False
     index = None
@@ -154,6 +154,7 @@ class ESGenerator:
     source_includes = None
     verbose = True
     progress = 0
+    size = None
 
     def __init__(self, host=None,
                  port=9200,
@@ -178,8 +179,7 @@ class ESGenerator:
             'http_compress': True
             }]
             )
-        if source:
-            self.source = source
+        self.source = source
         self.chunksize = chunksize
         self.headless = headless
         self.index = index
@@ -198,17 +198,17 @@ class ESGenerator:
         see elasticsearch_dsl.utils.py::ObjectBase(AttrDict)__init__.py
         """
         if hide_metadata and not source:
-            eprint("ERROR! do not use -headless and -source False!")
+            eprint("ERROR! do not use -headless and -source False at the same Time!")
             exit(-1)
-        elif hide_metadata:
+        for key in elasticsearch_dsl.utils.META_FIELDS:
+            if key in meta:
+                meta["_{}".format(key)] = meta.pop(key)
+        if "doc_type" in meta:
+            meta["_type"] = meta.pop("doc_type")
+        meta["_source"] = {}
+        if hide_metadata:
             return record
         else:
-            for key in elasticsearch_dsl.utils.META_FIELDS:
-                if key in meta:
-                    meta["_{}".format(key)] = meta.pop(key)
-            if "doc_type" in meta:
-                meta["_type"] = meta.pop("doc_type")
-            meta["source"] = {}
             if source:
                 meta["_source"] = record
             return meta
@@ -272,8 +272,9 @@ class IDFile(ESGenerator):
     def write_file(self):
         """
         writing of idfile for the consume generator,
-        we instance this here to be used in generator() function, even if we don't use it in this parent class
-        at this point we just like to error-print every non missing ids
+        we instance this here to be used in generator() function, even if we
+        don't use it in this parent class at this point we just like to
+        error-print every non missing ids
         """
         missing = list()
         for item in self.ids:
@@ -300,7 +301,7 @@ class IDFile(ESGenerator):
                                      source=self.source,
                                      excludes=self.source_excludes,
                                      includes=self.source_includes,
-                                     headless=self.headless,
+                                     headless=False,
                                      timeout=self.timeout,
                                      verbose=False) as generatorObject:
                         for hit in generatorObject:
@@ -325,7 +326,7 @@ class IDFile(ESGenerator):
                                          meta=hit.meta.to_dict(),
                                          source=self.source)
                         yield doc
-                        del self.ids[self.ids.index(hit.meta.to_dict()["id"])]
+                        del self.ids[self.ids.index(hit.meta.to_dict()["_id"])]
             if not self.ids:
                 self.ids = []
         self.write_file()
@@ -409,7 +410,6 @@ def esfatgenerator(**kwargs):
                 chunks = []
     if chunks:
         yield chunks
-                
 
 
 def litter(lst, elm):
@@ -472,6 +472,8 @@ def run():
     parser.add_argument('-source', type=str2bool, nargs='?',
                         const=True, default=True,
                         help='return the Document or just the Elasticsearch-Metadata')
+    parser.add_argument('-size', type=int, default=None,
+                        help='just return the first n-Records of the search')
     parser.add_argument('-fat', type=str2bool, nargs='?',
                         const=True, default=True,
                         help='use the fatgenerator to get whole elasticsearch pagechunks')
