@@ -39,6 +39,7 @@ def test_esgenerator(**kwargs):
     records = []
     with es2json.ESGenerator(**default_kwargs, **kwargs) as es:
         for n, record in enumerate(es.generator()):
+            record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
 
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
