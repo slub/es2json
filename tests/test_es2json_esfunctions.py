@@ -102,7 +102,7 @@ def test_esidfilegenerator_iterable():
     expected_records = []
     ids = []
     for n in range(200, 300):
-        retrecord = deepcopy(default_returnrecord["_source"])
+        retrecord = {}
         retrecord["foo"] = n
         retrecord["baz"] = "test{}".format(n)
         retrecord["bar"] = MAX-n
@@ -112,7 +112,7 @@ def test_esidfilegenerator_iterable():
     with es2json.IDFile(idfile=ids, headless=True, **default_kwargs) as es:
         for record in es.generator():
             records.append(dict(sorted(record.items())))
-    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+    assert sorted(expected_records, key=lambda k: k["foo"]) == sorted(records, key=lambda k: k["foo"])
 
 
 def test_esidfilegenerator_file():
@@ -120,19 +120,18 @@ def test_esidfilegenerator_file():
     expected_records = []
     with open(fd, "w") as outp:
         for n in range(200, 300):
-            retrecord = deepcopy(default_returnrecord)
-            retrecord["_id"] = str(n)
-            retrecord["_source"]["foo"] = n
-            retrecord["_source"]["baz"] = "test{}".format(n)
-            retrecord["_source"]["bar"] = MAX-n
+            retrecord = {}
+            retrecord["foo"] = n
+            retrecord["baz"] = "test{}".format(n)
+            retrecord["bar"] = MAX-n
             expected_records.append(dict(sorted(retrecord.items())))
             print(n, file=outp)
     records = []
-    with es2json.IDFile(idfile=fd, **default_kwargs) as es:
+    with es2json.IDFile(idfile=fd, headless=True, **default_kwargs) as es:
         for record in es.generator():
             records.append(dict(sorted(record.items())))
     os.remove(fd)
-    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+    assert sorted(expected_records, key=lambda k: k["foo"]) == sorted(records, key=lambda k: k["foo"])
 
 
 def test_eidfileconsumegenerator():
@@ -140,18 +139,17 @@ def test_eidfileconsumegenerator():
     expected_records = []
     with open(fd, "w") as outp:
         for n in range(200, 300):
-            retrecord = deepcopy(default_returnrecord)
-            retrecord["_id"] = str(n)
-            retrecord["_source"]["foo"] = n
-            retrecord["_source"]["baz"] = "test{}".format(n)
-            retrecord["_source"]["bar"] = MAX-n
+            retrecord = {}
+            retrecord["foo"] = n
+            retrecord["baz"] = "test{}".format(n)
+            retrecord["bar"] = MAX-n
             expected_records.append(dict(sorted(retrecord.items())))
             print(n, file=outp)
     records = []
-    with es2json.IDFileConsume(idfile=fd, **default_kwargs) as es:
+    with es2json.IDFileConsume(idfile=fd, headless=True, **default_kwargs) as es:
         for record in es.generator():
             records.append(dict(sorted(record.items())))
-    assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+    assert sorted(expected_records, key=lambda k: k["foo"]) == sorted(records, key=lambda k: k["foo"])
     assert es2json.isfile(fd) is False
 
 
@@ -161,17 +159,16 @@ def test_eidfileconsumegenerator_missing_ids():
     found_ids = set()
     with open(fd, "w") as outp:
         for n in range(MAX-100, MAX+200):
-            print(n,file=outp)
-            if n < 1000: # we don't expect more than 1000
-                retrecord = deepcopy(default_returnrecord)
-                retrecord["_id"] = str(n)
-                retrecord["_source"]["foo"] = n
-                retrecord["_source"]["baz"] = "test{}".format(n)
-                retrecord["_source"]["bar"] = MAX-n
+            print(n, file=outp)
+            if n < MAX:
+                retrecord = {}
+                retrecord["foo"] = n
+                retrecord["baz"] = "test{}".format(n)
+                retrecord["bar"] = MAX-n
                 expected_records.append(dict(sorted(retrecord.items())))
-    with es2json.IDFileConsume(idfile=fd, **default_kwargs) as es:
+    with es2json.IDFileConsume(idfile=fd, headless=True, **default_kwargs) as es:
         for record in es.generator():
-            found_ids.add(record["_id"])
+            found_ids.add(record["foo"])
             assert dict(sorted(record.items())) in expected_records
     with open(fd, "r") as inp:
         for ppn in inp:
