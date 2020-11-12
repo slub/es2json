@@ -166,14 +166,14 @@ def test_eidfileconsumegenerator_missing_ids():
                 retrecord["baz"] = "test{}".format(n)
                 retrecord["bar"] = MAX-n
                 expected_records.append(dict(sorted(retrecord.items())))
-    with es2json.IDFileConsume(idfile=fd, headless=True, **default_kwargs) as es:
+    with es2json.IDFileConsume(idfile=fd, headless=False, **default_kwargs) as es:
         for record in es.generator():
-            found_ids.add(record["foo"])
-            assert dict(sorted(record.items())) in expected_records
+            found_ids.add(record["_id"])
+            assert dict(sorted(record["_source"].items())) in expected_records
     with open(fd, "r") as inp:
         for ppn in inp:
             assert ppn.rstrip() not in found_ids
-    os.remove(fd)
+    os.remove(fd)  # cleanup
 
 
 def test_esfatgenerator():
@@ -184,6 +184,7 @@ def test_esfatgenerator():
         retrecord["_source"]["foo"] = n
         retrecord["_source"]["bar"] = MAX-n
         retrecord["_source"]["baz"] = "test{}".format(n)
+        retrecord["sort"] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     for fatrecords in es2json.esfatgenerator(**default_kwargs):
