@@ -14,8 +14,7 @@ default_kwargs = {
 
 MAX = 1000
 
-default_returnrecord = {"sort": None,
-                        "_index": "test",
+default_returnrecord = {"_index": "test",
                         "_score": None,
                         "_type": "_doc",
                         "_source": {}
