@@ -320,12 +320,13 @@ class IDFile(ESGenerator):
                                                     _source=self.source)
                 for hit in s:
                     if hit:
+                        _id = hit.meta.to_dict()["id"]
                         doc = self.return_doc(record=hit.to_dict(),
                                          hide_metadata=self.headless,
                                          meta=hit.meta.to_dict(),
                                          source=self.source)
                         yield doc
-                        del self.ids[self.ids.index(hit.meta.to_dict()["_id"])]
+                        del self.ids[self.ids.index(_id)]
             if not self.ids:
                 self.ids = []
         self.write_file()
