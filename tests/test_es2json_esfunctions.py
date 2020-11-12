@@ -34,7 +34,6 @@ def test_esgenerator(**kwargs):
         retrecord = deepcopy(default_returnrecord)
         retrecord["_source"] = record
         retrecord["_id"] = str(n)
-        retrecord['sort'] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     with es2json.ESGenerator(**default_kwargs, **kwargs) as es:
@@ -50,11 +49,11 @@ def test_esgenerator_NoneSource():
     for n, record in enumerate(testdata):
         retrecord = deepcopy(default_returnrecord)
         retrecord["_id"] = str(n)
-        retrecord['sort'] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     with es2json.ESGenerator(source=False, **default_kwargs) as es:
         for record in es.generator():
+            record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
@@ -67,11 +66,11 @@ def test_esgenerator_source_includes():
         for item in includes:
             retrecord["_source"][item] = record[item]
         retrecord["_id"] = str(n)
-        retrecord['sort'] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     with es2json.ESGenerator(includes=includes, **default_kwargs) as es:
         for record in es.generator():
+            record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
@@ -83,11 +82,11 @@ def test_esgenerator_source_excludes():
         retrecord["_id"] = str(n)
         retrecord["_source"]["foo"] = n
         retrecord["_source"]["baz"] = "test{}".format(n)
-        retrecord['sort'] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     with es2json.ESGenerator(excludes="bar", **default_kwargs) as es:
         for record in es.generator():
+            record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
@@ -238,10 +237,10 @@ def test_esfatgenerator():
         retrecord["_source"]["foo"] = n
         retrecord["_source"]["bar"] = MAX-n
         retrecord["_source"]["baz"] = "test{}".format(n)
-        retrecord["sort"] = [n]
         expected_records.append(dict(sorted(retrecord.items())))
     records = []
     for fatrecords in es2json.esfatgenerator(**default_kwargs):
         for record in fatrecords:
+            records.pop("sort")
             records.append(dict(sorted(record.items())))
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
