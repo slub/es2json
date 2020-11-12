@@ -167,7 +167,8 @@ class ESGenerator:
                  headless=False,
                  chunksize=1000,
                  timeout=10,
-                 verbose=True):
+                 verbose=True,
+                 size=None):
         self.es = elasticsearch.Elasticsearch(
             [{
             'host': host,
@@ -187,6 +188,7 @@ class ESGenerator:
         self.source_includes = includes
         self.body = body
         self.verbose = verbose
+        self.size = size
 
     def return_doc(self, record, hide_metadata, meta, source):
         """
@@ -230,8 +232,15 @@ class ESGenerator:
             s = s.update_from_dict(self.body)
         if self.verbose:
             hits_total = s.count()
-        search = s.params(scroll='12h').scan()
-        for n, hit in enumerate(search):
+        if self.size:
+            if ':' in self.size:
+                searchslice = slice(int(self.size.split(':')[0]), int(self.size.split(':')[1]), 1)
+            else:
+                searchslice = slice(0, int(self.size), 1)
+            hits = s[searchslice].execute()
+        else:
+            hits = s.params(scroll='12h').scan()
+        for n, hit in enumerate(hits):
             doc = self.return_doc(record=hit.to_dict(), hide_metadata=self.headless, meta=hit.meta.to_dict(), source=self.source)
             if doc:
                 yield doc
@@ -472,10 +481,13 @@ def run():
     parser.add_argument('-source', type=str2bool, nargs='?',
                         const=True, default=True,
                         help='return the Document or just the Elasticsearch-Metadata')
-    parser.add_argument('-size', type=int, default=None,
-                        help='just return the first n-Records of the search')
+    parser.add_argument('-size', type=str, default=None,
+                        help='just return the first n-Records of the search,'
+                        'or return a python slice, e.g. 2:10 returns a list'
+                        'from the 2nd including the 9th element of the search'
+                        'only works with the ESGenerator')
     parser.add_argument('-fat', type=str2bool, nargs='?',
-                        const=True, default=True,
+                        const=True, default=False,
                         help='use the fatgenerator to get whole elasticsearch pagechunks')
     parser.add_argument("-includes", type=str,
                         help="just include following _source field(s) in the _source object")
