@@ -412,7 +412,7 @@ def esfatgenerator(**kwargs):
         kwargs["chunksize"] = 1000
     chunks = []
     with ESGenerator(**kwargs) as generator:
-        for record in enumerate(generator.generator()):
+        for record in generator.generator():
             chunks.append(record)
             if len(chunks) == kwargs["chunksize"]:
                 yield chunks
