@@ -254,14 +254,14 @@ class IDFile(ESGenerator):
     to reduce the searchwindow on
     """
     iterable = None
-    idfile = None
+    missing = None
     ids = None
 
     def __init__(self,  idfile=None, **kwargs):
         super().__init__(**kwargs)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
-        self.iterable = []  # an iterable containing all the IDs from idfile, not going to be reduced during runtime
-        self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime and for checks at the end if everything was found
+        self.missing = []  # an iterable containing all the IDs which we didn't find
+        self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
 
     def read_file(self):
         ids_set = set()
@@ -285,9 +285,8 @@ class IDFile(ESGenerator):
         error-print every non missing ids
         """
         missing = list()
-        for item in self.ids:
-            if item not in self.iterable:
-                eprint("ID {} not found".format(item))
+        for item in self.missing:
+            eprint("ID {} not found".format(item))
 
     def __enter__(self):
         self.read_file()
@@ -321,22 +320,29 @@ class IDFile(ESGenerator):
                                 yield doc
                                 del self.ids[n]
             else:
-                s = elasticsearch_dsl.Document.mget(docs=self.ids[:self.chunksize],
-                                                    using=self.es,
-                                                    index=self.index,
-                                                    _source_excludes=self.source_excludes,
-                                                    _source_includes=self.source_includes,
-                                                    _source=self.source)
-                for hit in s:
-                    if hit:
-                        _id = hit.meta.to_dict()["id"]
-                        doc = self.return_doc(record=hit.to_dict(),
-                                         hide_metadata=self.headless,
-                                         meta=hit.meta.to_dict(),
-                                         source=self.source)
-                        yield doc
-                        del self.ids[self.ids.index(_id)]
-            if not self.ids:
+                try:
+                    s = elasticsearch_dsl.Document.mget(docs=self.ids[:self.chunksize],
+                                                        using=self.es,
+                                                        index=self.index,
+                                                        _source_excludes=self.source_excludes,
+                                                        _source_includes=self.source_includes,
+                                                        _source=self.source,
+                                                        missing='raise')
+                except elasticsearch.exceptions.NotFoundError as e:
+                    for doc in e.info['docs']:
+                        self.missing.append(doc['_id'])
+                        del self.ids[self.ids.index(doc['_id'])]
+                else:
+                    for hit in s:
+                        if hit:
+                            _id = hit.meta.to_dict()["id"]
+                            doc = self.return_doc(record=hit.to_dict(),
+                                            hide_metadata=self.headless,
+                                            meta=hit.meta.to_dict(),
+                                            source=self.source)
+                            yield doc
+                            del self.ids[self.ids.index(_id)]
+            if not self.ids:  # if we delete the last item from ids, ids turns to None and then the while(len(list())) would throw an exception, since None isn't an iterable
                 self.ids = []
         self.write_file()
 
@@ -362,12 +368,10 @@ class IDFileConsume(IDFile):
         we instance this here to be used in generator() function, even if we don't use it in this parent class
         at this point we just like to error-print every non missing ids
         """
-        missing = list()
         with open(self.idfile, "w") as outp:
-            if self.ids:
-                for item in self.ids:
-                    if item not in self.iterable:
-                        print(item, file=outp)
+            if self.missing:
+                for item in self.missing:
+                    print(item, file=outp)
             else:  # no ids missing in the cluster? alright, we clean up
                 os.remove(self.idfile)
 
