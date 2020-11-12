@@ -4,6 +4,8 @@ import uuid
 import os
 import gzip
 from copy import deepcopy
+from generate_testdata import MAX
+
 
 default_kwargs = {
     "host": "localhost",
@@ -12,7 +14,6 @@ default_kwargs = {
     "type": "_doc",
 }
 
-MAX = 1000
 
 default_returnrecord = {"_index": "test",
                         "_score": None,

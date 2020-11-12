@@ -2,7 +2,7 @@
 import json
 import gzip
 
-from test_es2json_esfunctions import MAX
+MAX = 1000
 
 with gzip.open("testdata.ldj.gz", "wt") as outp:
     for n in range(0, MAX):
