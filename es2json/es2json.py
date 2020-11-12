@@ -10,7 +10,6 @@ import traceback
 import os
 from httplib2 import Http  # needed for put_dict
 
-
 def isint(num):
     '''
     check if num is a int without throwing an exception
@@ -169,16 +168,14 @@ class ESGenerator:
                  timeout=10,
                  verbose=True,
                  size=None):
-        self.es = elasticsearch.Elasticsearch(
-            [{
-            'host': host,
-            'port': port,
-            'timeout': timeout,
-            'max_retries': 10,
-            'retry_on_timeout': True,
-            'http_compress': True
-            }]
-            )
+        self.es = elasticsearch_dsl.connections.create_connection(**{
+                'host': host,
+                'port': port,
+                'timeout': timeout,
+                'max_retries': 10,
+                'retry_on_timeout': True,
+                'http_compress': True
+        })
         self.source = source
         self.chunksize = chunksize
         self.headless = headless
@@ -227,7 +224,7 @@ class ESGenerator:
             if doc:
                 yield doc
             return
-        s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=type).source(excludes=self.source_excludes, includes=self.source_includes)
+        s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes)
         if self.body:
             s = s.update_from_dict(self.body)
         if self.verbose:
@@ -298,27 +295,16 @@ class IDFile(ESGenerator):
     def generator(self):
         while len(self.ids) > 0:
             if self.body:
-                for n,_id in enumerate(self.ids[:self.chunksize]):
-                    searchbody = elasticsearch_dsl.Search.from_dict(self.body).query("match", id=_id)
-                    with ESGenerator(host=self.host,
-                                     port=self.port,
-                                     index=self.index,
-                                     type=self.doc_type,
-                                     body=searchbody.to_dict(),
-                                     source=self.source,
-                                     excludes=self.source_excludes,
-                                     includes=self.source_includes,
-                                     headless=False,
-                                     timeout=self.timeout,
-                                     verbose=False) as generatorObject:
-                        for hit in generatorObject:
-                            if hit:
-                                doc = self.return_doc(record=hit.to_dict(),
-                                         hide_metadata=self.headless,
-                                         meta=hit.meta.to_dict(),
-                                         source=self.source)
+                for _id in self.ids[:self.chunksize]:
+                    s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes).from_dict(self.body).query("match",_id=_id)
+                    if s.count() > 0:  # we got our document
+                        for n, hit in enumerate(s.execute()):
+                            doc = self.return_doc(record=hit.to_dict(), hide_metadata=self.headless, meta=hit.meta.to_dict(), source=self.source)
+                            if doc:
                                 yield doc
-                                del self.ids[n]
+                    else:  # oh no, no results, we delete it from self.ids to prevent endless loops and add it to the missing ids iterable
+                        self.missing.append(_id)
+                    del self.ids[self.ids.index(_id)]
             else:
                 try:
                     s = elasticsearch_dsl.Document.mget(docs=self.ids[:self.chunksize],
@@ -329,10 +315,10 @@ class IDFile(ESGenerator):
                                                         _source=self.source,
                                                         missing='raise')
                 except elasticsearch.exceptions.NotFoundError as e:
-                    for doc in e.info['docs']:
+                    for doc in e.info['docs']:  # we got some missing ids and harvest the missing ids from the Elasticsearch NotFoundError Exception
                         self.missing.append(doc['_id'])
                         del self.ids[self.ids.index(doc['_id'])]
-                else:
+                else:  # only gets called if we don't run into an exception
                     for hit in s:
                         if hit:
                             _id = hit.meta.to_dict()["id"]
