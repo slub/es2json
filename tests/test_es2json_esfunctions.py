@@ -240,6 +240,6 @@ def test_esfatgenerator():
     records = []
     for fatrecords in es2json.esfatgenerator(**default_kwargs):
         for record in fatrecords:
-            records.pop("sort")
+            record.pop("sort")
             records.append(dict(sorted(record.items())))
     assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
