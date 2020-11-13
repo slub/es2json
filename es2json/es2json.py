@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import json
-import elasticsearch
 import elasticsearch_dsl
 import argparse
 import logging
