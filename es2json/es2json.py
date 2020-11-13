@@ -153,9 +153,6 @@ class IDFile(ESGenerator):
         :param idfile: the path of the file containing the IDs or an iterable containing the IDs
         """
         super().__init__(**kwargs)
-        if not idfile:
-            helperscripts.eprint("idfile missing! Submit iterable with IDs or path to file.")
-            exit(-1)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
         self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
         self.read_file()
