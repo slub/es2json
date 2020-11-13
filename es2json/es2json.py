@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 import os
 import json
-import elasticsearch_dsl
 import argparse
+import elasticsearch
+import elasticsearch_dsl
 import helperscripts
-
 
 class ESGenerator:
     """
