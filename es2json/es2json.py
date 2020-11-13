@@ -241,7 +241,7 @@ class IDFile(ESGenerator):
 
 class IDFileConsume(IDFile):
     """
-    same class like IDFile, but here we use the write_idfile function and just use files, no iterables anymore
+    same class like IDFile, but here we overwrite the write_file and read_file functions to just use files, no iterables anymore
     """
     def __init__(self, **kwargs):
         """
