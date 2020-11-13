@@ -8,7 +8,7 @@ class ESGenerator:
     """
     Main generator Object where other Generators inherit from
     """
-    def __init__(self, host=None,
+    def __init__(self, host='localhost',
                  port=9200,
                  index=None,
                  type=None,
@@ -134,8 +134,7 @@ class IDFile(ESGenerator):
     wrapper for esgenerator() to submit a list of ids or a file with ids
     to reduce the searchwindow on
     """
-    missing = []  # an iterable containing all the IDs which we didn't find
-
+    
     def __init__(self,  idfile, **kwargs):
         """
         Creates a new IDFile Object
@@ -164,14 +163,14 @@ class IDFile(ESGenerator):
         self.iterable = list(ids_set)
         self.ids = list(ids_set)
 
-    def write_file(self):
+    def write_file(self, missing):
         """
         writing of idfile for the consume generator,
         we instance this here to be used in generator() function, even if we
         don't use it in this parent class at this point we just like to
         error-print every missing ids
         """
-        for item in self.missing:
+        for item in missing:
             helperscripts.eprint("ID {} not found".format(item))
 
     def generator(self):
@@ -181,6 +180,7 @@ class IDFile(ESGenerator):
         better would be to reduce the set of documents to a pure idlist, this is quite fast over mget
         often, its needed to do it with a search, therefore both ways work
         """
+        missing = []  # an iterable containing missing ids
         while len(self.ids) > 0:
             if self.body:
                 for _id in self.ids[:self.chunksize]:
@@ -195,7 +195,7 @@ class IDFile(ESGenerator):
                             if doc:
                                 yield doc
                     else:  # oh no, no results, we delete it from self.ids to prevent endless loops and add it to the missing ids iterable
-                        self.missing.append(_id)
+                        missing.append(_id)
                     del self.ids[self.ids.index(_id)]
             else:
                 try:
@@ -208,7 +208,7 @@ class IDFile(ESGenerator):
                                                         missing='raise')
                 except elasticsearch.exceptions.NotFoundError as e:
                     for doc in e.info['docs']:  # we got some missing ids and harvest the missing ids from the Elasticsearch NotFoundError Exception
-                        self.missing.append(doc['_id'])
+                        missing.append(doc['_id'])
                         del self.ids[self.ids.index(doc['_id'])]
                 else:  # only gets called if we don't run into an exception
                     for hit in s:
@@ -224,7 +224,8 @@ class IDFile(ESGenerator):
                 would throw an exception, since None isn't an iterable
                 """
                 self.ids = []
-        self.write_file()
+        self.write_file(missing)
+        del missing
 
 
 class IDFileConsume(IDFile):
@@ -247,14 +248,14 @@ class IDFileConsume(IDFile):
                 ids_set.add(ppn.rstrip())
         self.ids = list(ids_set)
 
-    def write_file(self):
+    def write_file(self, missing):
         """
         overwriting write_file so this outputs a idfile of the consume generator with the missing ids
         if no IDs are missing, that file gets deleted
         """
-        with open(self.idfile, "w") as outp:
-            if self.missing:
-                for item in self.missing:
+        if missing:
+            with open(self.idfile, "w") as outp:
+                for item in missing:
                     print(item, file=outp)
-            else:  # no ids missing in the cluster? alright, we clean up
-                os.remove(self.idfile)
+        else:  # no ids missing in the cluster? alright, we clean up
+            os.remove(self.idfile)
