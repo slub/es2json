@@ -1,6 +1,4 @@
-from es2json import ESGenerator
-from es2json import IDFile
-from es2json import IDFileConsume
+from es2json import *
 
 """
 wrapper functions for deprecated es2json API calls
