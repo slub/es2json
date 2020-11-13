@@ -190,10 +190,8 @@ class IDFile(ESGenerator):
                                                                                 includes=self.source_includes).from_dict(self.body).query("match",
                                                                                                                                           _id=_id)
                     if s.count() > 0:  # we got our document
-                        for n, hit in enumerate(s.execute()):
-                            doc = self.return_doc(hit)
-                            if doc:
-                                yield doc
+                        for hit in s.execute():
+                            yield self.return_doc(hit)
                     else:  # oh no, no results, we delete it from self.ids to prevent endless loops and add it to the missing ids iterable
                         missing.append(_id)
                     del self.ids[self.ids.index(_id)]
@@ -212,11 +210,9 @@ class IDFile(ESGenerator):
                         del self.ids[self.ids.index(doc['_id'])]
                 else:  # only gets called if we don't run into an exception
                     for hit in s:
-                        if hit:
-                            _id = hit.meta.to_dict()["id"]
-                            doc = self.return_doc(hit)
-                            yield doc
-                            del self.ids[self.ids.index(_id)]
+                        _id = hit.meta.to_dict()["id"]
+                        yield self.return_doc(hit)
+                        del self.ids[self.ids.index(_id)]
             if not self.ids:
                 """
                 if we delete the last item from ids,
