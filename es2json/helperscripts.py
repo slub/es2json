@@ -37,7 +37,7 @@ def litter(lst, elm):
             return lst
 
 
-def query_or_file(v):
+def jsonstring_or_file(v):
     if isfile(v):
         with open(v) as fd:
             return json.load(fd)
