@@ -8,24 +8,11 @@ import logging
 import traceback
 from helperscripts import *
 
+
 class ESGenerator:
     """
     Main generator Object where other Generators inherit from
     """
-    es = None
-    source = False
-    chunksize = None
-    headless = False
-    index = None
-    doc_type = None
-    id = None
-    body = None
-    source_excludes = None
-    source_includes = None
-    verbose = True
-    progress = 0
-    size = None
-
     def __init__(self, host=None,
                  port=9200,
                  index=None,
@@ -40,6 +27,22 @@ class ESGenerator:
                  timeout=10,
                  verbose=True,
                  size=None):
+        """
+        Construct a new ESGenerator Object.
+        :param host: Elasticsearch host to use, default is localhost
+        :param port: Elasticsearch port to use, default is 9200
+        :param index: Elasticsearch Index to use, optional, if no parameter given, ESGenerator uses ALL the indices
+        :param typ: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
+        :param body: Query body to use for Elasticsearch, optional
+        :param source: Include the source field in your record, default is False
+        :param excludes: don't include the fields defined by this parameter, optional
+        :param includes: only include the fields defined by this parameter, optional
+        :param headless: don't include the metafields, only the data in the _source field
+        :param chunksize: pagesize to used
+        :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
+        :param verbose: print out progress information on /dev/stderr, default is True, optional
+        :param size: only return the first n records or defined by a python slice submitted by this parameter, optional
+        """
         self.es = elasticsearch_dsl.connections.create_connection(**{
                 'host': host,
                 'port': port,
@@ -48,6 +51,7 @@ class ESGenerator:
                 'retry_on_timeout': True,
                 'http_compress': True
         })
+        self.id = id
         self.source = source
         self.chunksize = chunksize
         self.headless = headless
@@ -59,15 +63,15 @@ class ESGenerator:
         self.verbose = verbose
         self.size = size
 
-    def return_doc(self, record, hide_metadata, meta, source):
+    def return_doc(self, hit):
         """
         prints out the elasticsearch record defined by user input
-        if source is False, only metadata fields are printed out
-        if headless is true, metadata also gets printed out
         also rewrites the metadata fields back to NonPythonic Elasticsearch Standard
         see elasticsearch_dsl.utils.py::ObjectBase(AttrDict)__init__.py
+        :param hit: The hit returned from the elasticsearch-call
         """
-        if hide_metadata and not source:
+        meta = hit.meta.to_dict()
+        if self.headless and not self.source:
             eprint("ERROR! do not use -headless and -source False at the same Time!")
             exit(-1)
         for key in elasticsearch_dsl.utils.META_FIELDS:
@@ -76,11 +80,11 @@ class ESGenerator:
         if "doc_type" in meta:
             meta["_type"] = meta.pop("doc_type")
         meta["_source"] = {}
-        if hide_metadata:
-            return record
+        if self.headless:
+            return hit.to_dict()
         else:
-            if source:
-                meta["_source"] = record
+            if self.source:
+                meta["_source"] = hit.to_dict()
             return meta
 
     def __enter__(self):
@@ -92,9 +96,7 @@ class ESGenerator:
     def generator(self):
         if self.id:
             s = elasticsearch_dsl.Document.get(using=self.es, index=self.index, id=self.id, _source_excludes=self.source_excludes, _source_includes=self.source_includes, _source=self.source)
-            doc = self.return_doc(record=s.to_dict(), hide_metadata=self.headless, meta=s.meta.to_dict(), source=self.source)
-            if doc:
-                yield doc
+            yield self.return_doc(s)
             return
         s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes)
         if self.body:
@@ -110,7 +112,7 @@ class ESGenerator:
         else:
             hits = s.params(scroll='12h').scan()
         for n, hit in enumerate(hits):
-            doc = self.return_doc(record=hit.to_dict(), hide_metadata=self.headless, meta=hit.meta.to_dict(), source=self.source)
+            doc = self.return_doc(hit)
             if doc:
                 yield doc
             if self.verbose and (n+1)%self.chunksize==0 or n+1==hits_total:
@@ -122,14 +124,18 @@ class IDFile(ESGenerator):
     wrapper for esgenerator() to submit a list of ids or a file with ids
     to reduce the searchwindow on
     """
-    iterable = None
-    missing = None
-    ids = None
+    missing = []  # an iterable containing all the IDs which we didn't find
 
-    def __init__(self,  idfile=None, **kwargs):
+    def __init__(self,  idfile, **kwargs):
+        """
+        Creates a new IDFile Object
+        :param idfile: the path of the file containing the IDs or an iterable containing the IDs
+        """
         super().__init__(**kwargs)
+        if not idfile:
+            eprint("idfile missing! Submit iterable with IDs or path to file.")
+            exit(-1)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
-        self.missing = []  # an iterable containing all the IDs which we didn't find
         self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
 
     def read_file(self):
@@ -151,7 +157,7 @@ class IDFile(ESGenerator):
         writing of idfile for the consume generator,
         we instance this here to be used in generator() function, even if we
         don't use it in this parent class at this point we just like to
-        error-print every non missing ids
+        error-print every missing ids
         """
         missing = list()
         for item in self.missing:
@@ -171,7 +177,7 @@ class IDFile(ESGenerator):
                     s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes).from_dict(self.body).query("match",_id=_id)
                     if s.count() > 0:  # we got our document
                         for n, hit in enumerate(s.execute()):
-                            doc = self.return_doc(record=hit.to_dict(), hide_metadata=self.headless, meta=hit.meta.to_dict(), source=self.source)
+                            doc = self.return_doc(hit)
                             if doc:
                                 yield doc
                     else:  # oh no, no results, we delete it from self.ids to prevent endless loops and add it to the missing ids iterable
@@ -194,10 +200,7 @@ class IDFile(ESGenerator):
                     for hit in s:
                         if hit:
                             _id = hit.meta.to_dict()["id"]
-                            doc = self.return_doc(record=hit.to_dict(),
-                                            hide_metadata=self.headless,
-                                            meta=hit.meta.to_dict(),
-                                            source=self.source)
+                            doc = self.return_doc(hit)
                             yield doc
                             del self.ids[self.ids.index(_id)]
             if not self.ids:  # if we delete the last item from ids, ids turns to None and then the while(len(list())) would throw an exception, since None isn't an iterable
@@ -207,9 +210,12 @@ class IDFile(ESGenerator):
 
 class IDFileConsume(IDFile):
     """
-    same class like IDFile, but here we use the write_idfile function
+    same class like IDFile, but here we use the write_idfile function and just use files, no iterables anymore
     """
     def __init__(self, **kwargs):
+        """
+        Creates a new IDFileConsume Object
+        """
         super().__init__(**kwargs)
 
     def read_file(self):
@@ -217,14 +223,11 @@ class IDFileConsume(IDFile):
         with open(self.idfile, "r") as inp:
             for ppn in inp:
                 ids_set.add(ppn.rstrip())
-        self.iterable = list(ids_set)
         self.ids = list(ids_set)
 
     def write_file(self):
         """
-        overwriting __exit so this outputs a idfile f the consume generator with the missing ids (or none),
-        we instance this here to be used in generator() function, even if we don't use it in this parent class
-        at this point we just like to error-print every non missing ids
+        overwriting __exit so this outputs a idfile of the consume generator with the missing ids (or none)
         """
         with open(self.idfile, "w") as outp:
             if self.missing:
