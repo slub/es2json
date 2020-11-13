@@ -7,6 +7,7 @@ import elasticsearch
 import elasticsearch_dsl
 import helperscripts
 
+
 class ESGenerator:
     """
     Main generator Object where other Generators inherit from
@@ -87,9 +88,17 @@ class ESGenerator:
             return meta
 
     def __enter__(self):
+        """
+        function needed for with-statement
+        __enter__ only returns the instanced object
+        """
         return self
 
     def __exit__(self, type, value, traceback):
+        """
+        functions needed for with-statement
+        since we don't need to do any cleanup, this function does nothing
+        """
         pass
 
     def generator(self):
@@ -111,6 +120,11 @@ class ESGenerator:
         if self.verbose:
             hits_total = s.count()
         if self.size:
+            """
+            we build the slice() object here, if this fails because of user input,
+            the stacktrace of slice() is very informative, so we don't do our own Error handling here
+            for size-searches, we don't use a scroll since the user wants only a small searchwindow
+            """
             if ':' in self.size:
                 searchslice = slice(int(self.size.split(':')[0]), int(self.size.split(':')[1]), 1)
             else:
@@ -144,6 +158,7 @@ class IDFile(ESGenerator):
             exit(-1)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
         self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
+        self.read_file()
 
     def read_file(self):
         ids_set = set()
@@ -170,11 +185,12 @@ class IDFile(ESGenerator):
             helperscripts.eprint("ID {} not found".format(item))
 
     def __enter__(self):
-        self.read_file()
+        """
+        function needed for with-statement
+        __enter__ only returns the instanced object
+        but we also need to read the file
+        """
         return self
-
-    def __exit__(self, type, value, traceback):
-        pass
 
     def generator(self):
         while len(self.ids) > 0:
@@ -253,6 +269,9 @@ class IDFileConsume(IDFile):
 
 
 def run():
+    """
+    here We build a simple cmdline tool so we can use our classes from shell
+    """
     parser = argparse.ArgumentParser(description='Elasticsearch to JSON')
     parser.add_argument('-host', type=str, default="127.0.0.1",
                         help='hostname or ip of the ElasticSearch-node to use,'
