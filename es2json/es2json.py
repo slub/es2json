@@ -279,6 +279,8 @@ def run():
                         'or return a python slice, e.g. 2:10 returns a list '
                         'from the 2nd including the 9th element of the search '
                         'only works with the ESGenerator')
+    parser.add_argument('-timeout', type=int, default=10,
+                        help='Set the time in seconds after when a ReadTimeoutError can occur. Default is 10 seconds. Raise for big/difficult querys ')
     parser.add_argument("-includes", type=str,
                         help="just include following _source field(s) in the _source object")
     parser.add_argument("-excludes", type=str,
