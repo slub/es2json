@@ -221,7 +221,6 @@ class IDFile(ESGenerator):
                 """
                 self.ids = []
         self.write_file(missing)
-        del missing
 
 
 class IDFileConsume(IDFile):
