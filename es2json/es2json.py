@@ -96,7 +96,7 @@ class ESGenerator:
 
     def __exit__(self, type, value, traceback):
         """
-        functions needed for with-statement
+        function needed for with-statement
         since we don't need to do any cleanup, this function does nothing
         """
         pass
