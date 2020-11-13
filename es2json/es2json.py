@@ -296,8 +296,7 @@ def run():
                         help="exclude following _source field(s) from the _source object")
     parser.add_argument(
         "-id", type=str, help="retrieve single document (optional)")
-    parser.add_argument("-headless", type=helperscripts.str2bool, nargs='?',
-                        const=True, default=True, help="don't print Elasticsearch metadata")
+    parser.add_argument("-headless", action='store_true', default=False, help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=helperscripts.jsonstring_or_file, help='Searchbody')
     # no, i don't steal the syntax from esbulk...
     parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
@@ -306,8 +305,7 @@ def run():
         '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
-    parser.add_argument('-pretty', type=helperscripts.str2bool, nargs='?',
-                        const=True, default=False, help="prettyprint")
+    parser.add_argument('-pretty', action='store_true', default=False, help="prettyprint")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
     args = parser.parse_args()
