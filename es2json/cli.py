@@ -65,6 +65,21 @@ def run():
                 args.id = slashsplit[5].rsplit("?")[0]
             else:
                 args.id = slashsplit[5]
+    if args.size:
+        """
+        we build the slice() object here, if this fails because of user input,
+        the stacktrace of slice() is very informative, so we don't do our own Error handling here
+        for size-searches, we don't use a scroll since the user wants only a small searchwindow
+        """
+        if isinstance(args.size, int):  # oh, we got an single number, not a string with an number or even an string describing a slice
+            args.size = str(args.size)
+        if ':' in args.size:
+            args.size = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
+        else:
+            args.size = slice(0, int(args.size), 1)
+    if args.headless and not args.source:
+        helperscripts.eprint("ERROR! do not use -headless and -source False at the same Time!")
+        exit(-1)
     if args.pretty:
         tabbing = 4
     else:

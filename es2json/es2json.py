@@ -36,8 +36,8 @@ class ESGenerator:
         :param chunksize: pagesize to used, default is 1000
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
         :param verbose: print out progress information on /dev/stderr, default is True, optional
-        :param size: only return the first n records or defined by a python slice
-        submitted by this parameter, optional
+        :param size: only return records defined by a python slice() object
+                     https://youtu.be/Nlnoa67MUJU
         """
         self.es = elasticsearch_dsl.connections.create_connection(**{
                 'host': host,
@@ -68,8 +68,7 @@ class ESGenerator:
         """
         meta = hit.meta.to_dict()
         if self.headless and not self.source:
-            helperscripts.eprint("ERROR! do not use -headless and -source False at the same Time!")
-            exit(-1)
+            return {}
         for key in elasticsearch_dsl.utils.META_FIELDS:
             if key in meta:
                 meta["_{}".format(key)] = meta.pop(key)
@@ -116,16 +115,7 @@ class ESGenerator:
         if self.verbose:
             hits_total = s.count()
         if self.size:
-            """
-            we build the slice() object here, if this fails because of user input,
-            the stacktrace of slice() is very informative, so we don't do our own Error handling here
-            for size-searches, we don't use a scroll since the user wants only a small searchwindow
-            """
-            if ':' in self.size:
-                searchslice = slice(int(self.size.split(':')[0]), int(self.size.split(':')[1]), 1)
-            else:
-                searchslice = slice(0, int(self.size), 1)
-            hits = s[searchslice].execute()
+            hits = s[self.size].execute()
         else:
             hits = s.params(scroll='12h', size=self.chunksize).scan()  # in scroll context, size = pagesize, still all records will be returned
         for n, hit in enumerate(hits):
