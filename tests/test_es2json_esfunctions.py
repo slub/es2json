@@ -231,10 +231,11 @@ def test_eidfileconsumegenerator_missing_ids_query():
         query = {"query": {"prefix":  {"baz": "test9"}}}
         records = []
         enter = False
-        for record in call_object(es2json.IDFileConsume, use_with=boolean, idfile=fd, headless=False, **default_kwargs):
+        for record in call_object(es2json.IDFileConsume, use_with=boolean, body=query, idfile=fd, headless=False, **default_kwargs):
             enter = True
             found_ids.add(record["_id"])
-            assert dict(sorted(record["_source"].items())) in expected_records
+            found_record = dict(sorted(record["_source"].items()))
+            assert found_record in expected_records
         assert enter
         with open(fd, "r") as inp:
             for ppn in inp:
