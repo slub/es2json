@@ -70,6 +70,14 @@ def litter(lst, elm):
             return lst
 
 
+def query_or_file(v):
+    if isfile(v):
+        with open(v) as fd:
+            return json.load(fd)
+    else:
+        return json.loads(v)
+
+
 def str2bool(v):
     """
     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse

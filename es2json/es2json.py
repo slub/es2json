@@ -298,7 +298,7 @@ def run():
         "-id", type=str, help="retrieve single document (optional)")
     parser.add_argument("-headless", type=helperscripts.str2bool, nargs='?',
                         const=True, default=True, help="don't print Elasticsearch metadata")
-    parser.add_argument('-body', type=json.loads, help='Searchbody')
+    parser.add_argument('-body', type=helperscripts.query_or_file, help='Searchbody')
     # no, i don't steal the syntax from esbulk...
     parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
                         "overwrites host/port/index/id/pretty")
@@ -332,7 +332,6 @@ def run():
     kwargs_generator = dict(**vars(args))
     kwargs_generator.pop("server")
     kwargs_generator.pop("pretty")
-    kwargs_generator.pop("fat")
     if args.idfile:
         ESGeneratorFunction = IDFile(**kwargs_generator).generator()
     elif args.idfile_consume:
