@@ -184,14 +184,6 @@ class IDFile(ESGenerator):
         for item in self.missing:
             helperscripts.eprint("ID {} not found".format(item))
 
-    def __enter__(self):
-        """
-        function needed for with-statement
-        __enter__ only returns the instanced object
-        but we also need to read the file
-        """
-        return self
-
     def generator(self):
         while len(self.ids) > 0:
             if self.body:
