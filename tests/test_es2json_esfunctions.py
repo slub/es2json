@@ -43,6 +43,12 @@ def call_object(object, use_with=False, **kwargs):
             yield record
 
 
+def test_bullshit_user_input(**kwargs):
+    for boolean in (True, False):
+        for record in call_object(es2json.ESGenerator, use_with=boolean, headless=True, source=False, **default_kwargs, **kwargs):
+            assert record == {}
+
+
 def test_esgenerator(**kwargs):
     """
     plain ESGenerator test, we test if we get back the full test-index
@@ -57,6 +63,59 @@ def test_esgenerator(**kwargs):
         records = []
         for n, record in enumerate(call_object(es2json.ESGenerator, use_with=boolean, **default_kwargs, **kwargs)):
             record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
+            records.append(dict(sorted(record.items())))
+        assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+
+
+def test_esgenerator_get_document():
+    """
+    ESGenerator test, we test if we get a single record defined over a query, without the meta fields
+    """
+    enter = False
+    for boolean in (True, False):
+        records = []
+        for record in call_object(es2json.ESGenerator, use_with=boolean, id=420, headless=True, **default_kwargs):
+            enter = True
+            assert record == {"foo": 420, "bar": MAX-420, "baz": "test420"}
+        assert enter  # testing if we even entered the generator() at all...useful for tests where we assert directly when iterating over the generator
+
+
+def test_esgenerator_size(**kwargs):
+    """
+    plain ESGenerator test, we test if we get back the correct window defined by size
+    """
+    size = slice(0, 25)  # just a random size
+    expected_records = []
+    for record in testdata[size]:
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_source"] = record
+        retrecord["_id"] = str(retrecord["_source"]["foo"])
+        retrecord["_score"] = 1.0
+        expected_records.append(dict(sorted(retrecord.items())))
+    for boolean in (True, False):
+        records = []
+        for record in call_object(es2json.ESGenerator, use_with=boolean, **default_kwargs, size=size, **kwargs):
+            #record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
+            records.append(dict(sorted(record.items())))
+        assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+
+
+def test_esgenerator_slice(**kwargs):
+    """
+    plain ESGenerator test, we test if we get back the correct window defined by size
+    """
+    slize = slice(2, 25)  # just a random slice
+    expected_records = []
+    for record in testdata[slize]:
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_source"] = record
+        retrecord["_id"] = str(retrecord["_source"]["foo"])
+        retrecord["_score"] = 1.0
+        expected_records.append(dict(sorted(retrecord.items())))
+    for boolean in (True, False):
+        records = []
+        for record in call_object(es2json.ESGenerator, use_with=boolean, size=slize, **default_kwargs, **kwargs):
+            #record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
         assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
