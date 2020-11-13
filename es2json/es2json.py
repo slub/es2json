@@ -1,11 +1,10 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+import os
 import json
 import elasticsearch_dsl
 import argparse
-import logging
-import traceback
-from helperscripts import *
+import helperscripts
 
 
 class ESGenerator:
@@ -40,7 +39,8 @@ class ESGenerator:
         :param chunksize: pagesize to used
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
         :param verbose: print out progress information on /dev/stderr, default is True, optional
-        :param size: only return the first n records or defined by a python slice submitted by this parameter, optional
+        :param size: only return the first n records or defined by a python slice
+        submitted by this parameter, optional
         """
         self.es = elasticsearch_dsl.connections.create_connection(**{
                 'host': host,
@@ -67,11 +67,11 @@ class ESGenerator:
         prints out the elasticsearch record defined by user input
         also rewrites the metadata fields back to NonPythonic Elasticsearch Standard
         see elasticsearch_dsl.utils.py::ObjectBase(AttrDict)__init__.py
-        :param hit: The hit returned from the elasticsearch-call
+        :param hit: The hit returned from the elasticsearch_dsl-call, is always
         """
         meta = hit.meta.to_dict()
         if self.headless and not self.source:
-            eprint("ERROR! do not use -headless and -source False at the same Time!")
+            helperscripts.eprint("ERROR! do not use -headless and -source False at the same Time!")
             exit(-1)
         for key in elasticsearch_dsl.utils.META_FIELDS:
             if key in meta:
@@ -94,10 +94,18 @@ class ESGenerator:
 
     def generator(self):
         if self.id:
-            s = elasticsearch_dsl.Document.get(using=self.es, index=self.index, id=self.id, _source_excludes=self.source_excludes, _source_includes=self.source_includes, _source=self.source)
+            s = elasticsearch_dsl.Document.get(using=self.es,
+                                               index=self.index,
+                                               id=self.id,
+                                               _source_excludes=self.source_excludes,
+                                               _source_includes=self.source_includes,
+                                               _source=self.source)
             yield self.return_doc(s)
             return
-        s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes)
+        s = elasticsearch_dsl.Search(using=self.es,
+                                     index=self.index,
+                                     doc_type=self.doc_type).source(excludes=self.source_excludes,
+                                                                    includes=self.source_includes)
         if self.body:
             s = s.update_from_dict(self.body)
         if self.verbose:
@@ -114,8 +122,8 @@ class ESGenerator:
             doc = self.return_doc(hit)
             if doc:
                 yield doc
-            if self.verbose and (n+1)%self.chunksize==0 or n+1==hits_total:
-                eprint("{}/{}".format(n+1, hits_total))
+            if self.verbose and (n+1) % self.chunksize == 0 or n+1 == hits_total:
+                helperscripts.eprint("{}/{}".format(n+1, hits_total))
 
 
 class IDFile(ESGenerator):
@@ -132,18 +140,18 @@ class IDFile(ESGenerator):
         """
         super().__init__(**kwargs)
         if not idfile:
-            eprint("idfile missing! Submit iterable with IDs or path to file.")
+            helperscripts.eprint("idfile missing! Submit iterable with IDs or path to file.")
             exit(-1)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
         self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
 
     def read_file(self):
         ids_set = set()
-        if isinstance(self.idfile, str) and isfile(self.idfile):
+        if isinstance(self.idfile, str) and helperscripts.isfile(self.idfile):
             with open(self.idfile, "r") as inp:
                 for ppn in inp:
                     ids_set.add(ppn.rstrip())
-        elif isiter(self.idfile) and not isinstance(self.idfile, str) and not isfile(self.idfile):
+        elif helperscripts.isiter(self.idfile) and not isinstance(self.idfile, str) and not helperscripts.isfile(self.idfile):
             for ppn in self.idfile:
                 ids_set.add(ppn.rstrip())
         else:
@@ -158,9 +166,8 @@ class IDFile(ESGenerator):
         don't use it in this parent class at this point we just like to
         error-print every missing ids
         """
-        missing = list()
         for item in self.missing:
-            eprint("ID {} not found".format(item))
+            helperscripts.eprint("ID {} not found".format(item))
 
     def __enter__(self):
         self.read_file()
@@ -173,7 +180,11 @@ class IDFile(ESGenerator):
         while len(self.ids) > 0:
             if self.body:
                 for _id in self.ids[:self.chunksize]:
-                    s = elasticsearch_dsl.Search(using=self.es, index=self.index, doc_type=self.doc_type).source(excludes=self.source_excludes, includes=self.source_includes).from_dict(self.body).query("match",_id=_id)
+                    s = elasticsearch_dsl.Search(using=self.es,
+                                                 index=self.index,
+                                                 doc_type=self.doc_type).source(excludes=self.source_excludes,
+                                                                                includes=self.source_includes).from_dict(self.body).query("match",
+                                                                                                                                          _id=_id)
                     if s.count() > 0:  # we got our document
                         for n, hit in enumerate(s.execute()):
                             doc = self.return_doc(hit)
@@ -202,7 +213,12 @@ class IDFile(ESGenerator):
                             doc = self.return_doc(hit)
                             yield doc
                             del self.ids[self.ids.index(_id)]
-            if not self.ids:  # if we delete the last item from ids, ids turns to None and then the while(len(list())) would throw an exception, since None isn't an iterable
+            if not self.ids:
+                """
+                if we delete the last item from ids,
+                ids turns to None and then the while(len(list()))
+                would throw an exception, since None isn't an iterable
+                """
                 self.ids = []
         self.write_file()
 
@@ -236,7 +252,6 @@ class IDFileConsume(IDFile):
                 os.remove(self.idfile)
 
 
-
 def run():
     parser = argparse.ArgumentParser(description='Elasticsearch to JSON')
     parser.add_argument('-host', type=str, default="127.0.0.1",
@@ -248,13 +263,13 @@ def run():
                         help='ElasticSearch Search Index to use')
     parser.add_argument('-type', type=str,
                         help='ElasticSearch Search Index Type to use')
-    parser.add_argument('-source', type=str2bool, nargs='?',
+    parser.add_argument('-source', type=helperscripts.str2bool, nargs='?',
                         const=True, default=True,
                         help='return the Document or just the Elasticsearch-Metadata')
     parser.add_argument('-size', type=str, default=None,
-                        help='just return the first n-Records of the search,'
-                        'or return a python slice, e.g. 2:10 returns a list'
-                        'from the 2nd including the 9th element of the search'
+                        help='just return the first n-Records of the search, '
+                        'or return a python slice, e.g. 2:10 returns a list '
+                        'from the 2nd including the 9th element of the search '
                         'only works with the ESGenerator')
     parser.add_argument("-includes", type=str,
                         help="just include following _source field(s) in the _source object")
@@ -262,17 +277,17 @@ def run():
                         help="exclude following _source field(s) from the _source object")
     parser.add_argument(
         "-id", type=str, help="retrieve single document (optional)")
-    parser.add_argument("-headless", type=str2bool, nargs='?',
+    parser.add_argument("-headless", type=helperscripts.str2bool, nargs='?',
                         const=True, default=True, help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=json.loads, help='Searchbody')
     # no, i don't steal the syntax from esbulk...
     parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
-        "overwrites host/port/index/id/pretty")
+                        "overwrites host/port/index/id/pretty")
     parser.add_argument(
         '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
-    parser.add_argument('-pretty', type=str2bool, nargs='?',
+    parser.add_argument('-pretty', type=helperscripts.str2bool, nargs='?',
                         const=True, default=False, help="prettyprint")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
@@ -280,7 +295,7 @@ def run():
     if args.server:
         slashsplit = args.server.split("/")
         args.host = slashsplit[2].rsplit(":")[0]
-        if isint(args.server.split(":")[2].rsplit("/")[0]):
+        if helperscripts.isint(args.server.split(":")[2].rsplit("/")[0]):
             args.port = args.server.split(":")[2].split("/")[0]
         args.index = args.server.split("/")[3]
         if len(slashsplit) > 4:
