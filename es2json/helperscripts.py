@@ -6,38 +6,6 @@ from httplib2 import Http  # needed for put_dict
 from argparse import ArgumentTypeError
 
 
-class ES_wrapper:
-    """ wraps functionality of the python elasticsearch client used in lod-api
-
-        In Order to properly react on different elasticsearch versions
-        this wrapper manages the difference in function calls to the es api
-    """
-    @staticmethod
-    def call(es, action, **kwargs):
-        """ Call a method of the elasticsearch api on a specified index
-        with multiple variable kwargs as options to each call. """
-        server_version = int(es.info()['version']['number'][0])
-        client_version = elasticsearch.VERSION[0]
-        if server_version < 7 and client_version < 7:
-            if '_source_excludes' in kwargs:
-                kwargs['_source_exclude'] = kwargs.pop('_source_excludes')
-            if '_source_includes' in kwargs:
-                kwargs['_source_include'] = kwargs.pop('_source_includes')
-        if server_version >= 7 and "doc_type" in kwargs and action in ("mget", "search"):  # doc_type obsolete after Major Version 7 for search and mget
-            kwargs.pop("doc_type")
-        return getattr(es, action)(**kwargs)
-
-    @staticmethod
-    def get_mapping_props(es, index, doc_type=None):
-        """ Requests the properties of a mapping applied to one index """
-        server_version = int(es.info()['version']['number'][0])
-        mapping = es.indices.get_mapping(index=index)
-        if server_version < 7 and doc_type:
-            return mapping[index]["mappings"][doc_type]["properties"]
-        elif server_version >= 7:
-            return mapping[index]["mappings"]["properties"]
-
-
 def litter(lst, elm):
     '''
     this function produces uniq lists, and appends/inserts new elements
