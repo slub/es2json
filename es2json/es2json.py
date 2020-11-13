@@ -296,7 +296,7 @@ def run():
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-pretty', action='store_true', default=False, help="prettyprint")
-    parser.add_argument('-verbose', action='store_true', default=False, help="print progress for large dumps")
+    parser.add_argument('-verbose', action='store_true', default=True, help="print progress for large dumps")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
     args = parser.parse_args()
