@@ -3,6 +3,7 @@ import json
 import uuid
 import os
 import gzip
+import pytest
 from copy import deepcopy
 from generate_testdata import MAX
 
@@ -41,6 +42,7 @@ def call_object(object, use_with=False, **kwargs):
         es = object(**kwargs)
         for record in es.generator():
             yield record
+    del es
 
 
 def test_bullshit_user_input(**kwargs):
@@ -213,8 +215,8 @@ def test_esidfilegenerator_file():
     """
     IDFile test, we test if we get the records, defined by an file containing ids, back
     """
-    fd = str(uuid.uuid4())
     expected_records = []
+    fd = str(uuid.uuid4())
     with open(fd, "w") as outp:
         for n in range(200, 300):
             retrecord = {}
@@ -231,7 +233,46 @@ def test_esidfilegenerator_file():
     os.remove(fd)
 
 
-def test_eidfileconsumegenerator():
+def test_esidfilegenerator_bad_file_error():
+    """
+    IDFile Test, we test if we get an error when putting in a non-exisiting file
+    """
+    for boolean in (True, False):
+        with pytest.raises(AttributeError):
+            for record in call_object(es2json.IDFile, use_with=boolean, idfile=str(uuid.uuid4())):
+                assert record
+
+
+def test_eidfile_missing_ids():
+    """
+    IDFile test, we test if we get the records, defined by an file containing ids
+    also the idfile contains IDs we don't have in our elasticsearch test index,
+    so we can check if es2json prints stderr of the IDs we couldn't find, which is the wished behaviour
+    """
+    for boolean in (True, False):
+        fd = str(uuid.uuid4())
+        expected_records = []
+        found_ids = set()
+        with open(fd, "w") as outp:
+            for n in range(MAX-100, MAX+200):
+                print(n, file=outp)
+                if n < MAX:
+                    retrecord = {}
+                    retrecord["foo"] = n
+                    retrecord["baz"] = "test{}".format(n)
+                    retrecord["bar"] = MAX-n
+                    expected_records.append(dict(sorted(retrecord.items())))
+        records = []
+        enter = False
+        for record in call_object(es2json.IDFile, use_with=boolean, idfile=fd, headless=False, **default_kwargs):
+            enter = True
+            found_ids.add(record["_id"])
+            assert dict(sorted(record["_source"].items())) in expected_records
+        assert enter
+        os.remove(fd)  # cleanup
+
+
+def test_esidfileconsumegenerator():
     """
     IDFileConsume test, we test if we get the records, defined by an file containing ids, back and that file get's consumed (==deleted)
     """
@@ -253,7 +294,7 @@ def test_eidfileconsumegenerator():
         assert es2json.isfile(fd) is False
 
 
-def test_eidfileconsumegenerator_query():
+def test_esidfileconsumegenerator_query():
     """
     IDFileConsume test, we test if we get the records, defined by an file containing ids and a querybody, back and that file get's consumed (==deleted)
     """
@@ -277,7 +318,7 @@ def test_eidfileconsumegenerator_query():
         assert es2json.isfile(fd) is False
 
 
-def test_eidfileconsumegenerator_missing_ids():
+def test_esidfileconsumegenerator_missing_ids():
     """
     IDFileConsume test, we test if we get the records, defined by an file containing ids, back and that file get's consumed
     also the idfile contains IDs we don't have in our elasticsearch test index,
@@ -309,7 +350,7 @@ def test_eidfileconsumegenerator_missing_ids():
         os.remove(fd)  # cleanup
 
 
-def test_eidfileconsumegenerator_missing_ids_query():
+def test_esidfileconsumegenerator_missing_ids_query():
     """
     same as test_edfileconsumegenerator_missing_ids but with a additional query
     """
