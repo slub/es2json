@@ -1,4 +1,3 @@
-import elasticsearch
 import json
 import sys
 import os
@@ -51,7 +50,7 @@ def str2bool(v):
     https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
     """
     if isinstance(v, bool):
-       return v
+        return v
     if v.lower() in ('yes', 'true', 't', 'y', '1', "none"):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
