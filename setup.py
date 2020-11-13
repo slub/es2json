@@ -14,10 +14,11 @@ setup(name='es2json',
       author='Bernhard Hering',
       author_email='bernhard.hering@slub-dresden.de',
       license="Apache 2.0",
-      packages=['es2json', 'helperscripts', 'oldapi_calls'],
+      packages=['es2json', 'helperscripts', 'oldapi_calls', 'cli'],
       package_dir={'es2json': 'es2json',
                    'helperscripts': 'es2json',
-                   'oldapi_calls': 'es2json'},
+                   'oldapi_calls': 'es2json',
+                   'cli': 'es2json'},
       install_requires=[
           'argparse>=1.4.0',
           'elasticsearch>=6.0.0',
@@ -26,6 +27,6 @@ setup(name='es2json',
       ],
       python_requires=">=3.5.*",
       entry_points={
-          "console_scripts": ["es2json=es2json.es2json:run"]
+          "console_scripts": ["es2json=es2json.cli:run"]
           }
       )
