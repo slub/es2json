@@ -37,7 +37,7 @@ class ESGenerator:
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
         :param verbose: print out progress information on /dev/stderr, default is True, optional
         :param size: only return records defined by a python slice() object
-                     https://youtu.be/Nlnoa67MUJU
+                     free earworm when working with python slices: https://youtu.be/Nlnoa67MUJU
         """
         self.es = elasticsearch_dsl.connections.create_connection(**{
                 'host': host,
@@ -97,6 +97,9 @@ class ESGenerator:
         pass
 
     def generator(self):
+        """
+        main generator function which harvests from the Elasticsearch-Cluster after all init and argument stuff is done
+        """
         if self.id:
             s = elasticsearch_dsl.Document.get(using=self.es,
                                                index=self.index,
@@ -144,6 +147,10 @@ class IDFile(ESGenerator):
         self.read_file()
 
     def read_file(self):
+        """
+        determining weather self.idfile is an iterable or a file,
+        harvests the IDs out of it and saves them in a set (for de-duplication)
+        """
         ids_set = set()
         if isinstance(self.idfile, str) and helperscripts.isfile(self.idfile):
             with open(self.idfile, "r") as inp:
@@ -168,6 +175,12 @@ class IDFile(ESGenerator):
             helperscripts.eprint("ID {} not found".format(item))
 
     def generator(self):
+        """
+        main generator function for IDFile and IDFileConsume
+        searching with an set of IDs can take quite long time
+        better would be to reduce the set of documents to a pure idlist, this is quite fast over mget
+        often, its needed to do it with a search, therefore both ways work
+        """
         while len(self.ids) > 0:
             if self.body:
                 for _id in self.ids[:self.chunksize]:
@@ -216,7 +229,7 @@ class IDFile(ESGenerator):
 
 class IDFileConsume(IDFile):
     """
-    same class like IDFile, but here we overwrite the write_file and read_file functions to just use files, no iterables anymore
+    same class like IDFile, but here we overwrite the write_file and read_file functions for missing-ID-handling purposes
     """
     def __init__(self, **kwargs):
         """
@@ -225,6 +238,9 @@ class IDFileConsume(IDFile):
         super().__init__(**kwargs)
 
     def read_file(self):
+        """
+        no more iterables here, only files
+        """
         ids_set = set()
         with open(self.idfile, "r") as inp:
             for ppn in inp:
@@ -233,7 +249,8 @@ class IDFileConsume(IDFile):
 
     def write_file(self):
         """
-        overwriting __exit so this outputs a idfile of the consume generator with the missing ids (or none)
+        overwriting write_file so this outputs a idfile of the consume generator with the missing ids
+        if no IDs are missing, that file gets deleted
         """
         with open(self.idfile, "w") as outp:
             if self.missing:
