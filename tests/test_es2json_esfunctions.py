@@ -29,6 +29,10 @@ with gzip.open("tests/testdata.ldj.gz", "rt") as inp:
 
 
 def call_object(object, use_with=False, **kwargs):
+    """
+    help function so we can easily test both use-cases of the generator-Objects
+    iterate over True and False and call call_object the same way
+    """
     if use_with:
         with object(**kwargs) as es:
             for record in es.generator():
@@ -40,6 +44,9 @@ def call_object(object, use_with=False, **kwargs):
 
 
 def test_esgenerator(**kwargs):
+    """
+    plain ESGenerator test, we test if we get back the full test-index
+    """
     expected_records = []
     for n, record in enumerate(testdata):
         retrecord = deepcopy(default_returnrecord)
@@ -55,6 +62,9 @@ def test_esgenerator(**kwargs):
 
 
 def test_esgenerator_NoneSource():
+    """
+    ESGenerator test, we test if we get back the full test-index, but without the _source field
+    """
     expected_records = []
     for n, record in enumerate(testdata):
         retrecord = deepcopy(default_returnrecord)
@@ -69,6 +79,9 @@ def test_esgenerator_NoneSource():
 
 
 def test_esgenerator_source_includes():
+    """
+    ESGenerator test, we test if we get back the full test-index, but only with the fields defined over includes param
+    """
     includes = ["foo"]
     expected_records = []
     for n, record in enumerate(testdata):
@@ -86,6 +99,9 @@ def test_esgenerator_source_includes():
 
 
 def test_esgenerator_source_excludes():
+    """
+    ESGenerator test, we test if we get back the full test-index, but without the fields defined over excludes param
+    """
     expected_records = []
     for n in range(0, MAX):
         retrecord = deepcopy(default_returnrecord)
@@ -102,6 +118,9 @@ def test_esgenerator_source_excludes():
 
 
 def test_esgenerator_query_headless():
+    """
+    ESGenerator test, we test if we get a single record defined over a query, without the meta fields
+    """
     query = {"query": {"match": {"baz.keyword": "test666"}}}
     enter = False
     for boolean in (True, False):
@@ -112,6 +131,9 @@ def test_esgenerator_query_headless():
         assert enter  # testing if we even entered the generator() at all...useful for tests where we assert directly when iterating over the generator
 
 def test_esidfilegenerator_iterable():
+    """
+    IDFile test, we test if we get the records, defined by an iterable "ids", back
+    """
     expected_records = []
     ids = []
     for n in range(200, 300):
@@ -129,6 +151,9 @@ def test_esidfilegenerator_iterable():
 
 
 def test_esidfilegenerator_file():
+    """
+    IDFile test, we test if we get the records, defined by an file containing ids, back
+    """
     fd = str(uuid.uuid4())
     expected_records = []
     with open(fd, "w") as outp:
@@ -148,6 +173,9 @@ def test_esidfilegenerator_file():
 
 
 def test_eidfileconsumegenerator():
+    """
+    IDFileConsume test, we test if we get the records, defined by an file containing ids, back and that file get's consumed (==deleted)
+    """
     fd = str(uuid.uuid4())
     for boolean in (True, False):
         expected_records = []
@@ -167,6 +195,9 @@ def test_eidfileconsumegenerator():
 
 
 def test_eidfileconsumegenerator_query():
+    """
+    IDFileConsume test, we test if we get the records, defined by an file containing ids and a querybody, back and that file get's consumed (==deleted)
+    """
     fd = str(uuid.uuid4())
     for boolean in (True, False):
         expected_records = []
@@ -188,6 +219,11 @@ def test_eidfileconsumegenerator_query():
 
 
 def test_eidfileconsumegenerator_missing_ids():
+    """
+    IDFileConsume test, we test if we get the records, defined by an file containing ids, back and that file get's consumed
+    also the idfile contains IDs we don't have in our elasticsearch test index,
+    so we can check if the file still contains the IDs we couldn't find, which is the wished behaviour
+    """
     fd = str(uuid.uuid4())
     for boolean in (True, False):
         expected_records = []
@@ -215,20 +251,23 @@ def test_eidfileconsumegenerator_missing_ids():
 
 
 def test_eidfileconsumegenerator_missing_ids_query():
+    """
+    same as test_edfileconsumegenerator_missing_ids but with a additional query
+    """
     fd = str(uuid.uuid4())
     for boolean in (True, False):
         expected_records = []
         found_ids = set()
         with open(fd, "w") as outp:
-            for n in range(MAX-200, MAX+200):
+            for n in range(0, MAX+200):
                 print(n, file=outp)
-                if n < MAX and str(n).startswith("9"):
+                if n < MAX and ( str(n).startswith("9") or str(n).startswith("1") ):
                     retrecord = {}
                     retrecord["foo"] = n
                     retrecord["baz"] = "test{}".format(n)
                     retrecord["bar"] = MAX-n
                     expected_records.append(dict(sorted(retrecord.items())))
-        query = {"query": {"prefix":  {"baz": "test9"}}}
+        query = {"query": {"bool": {"filter": {"bool": {"should": [{"prefix": {"baz.keyword": "test9"}},{"prefix": {"baz.keyword": "test1"}}]}}}}}
         records = []
         enter = False
         for record in call_object(es2json.IDFileConsume, use_with=boolean, body=query, idfile=fd, headless=False, **default_kwargs):
@@ -244,6 +283,9 @@ def test_eidfileconsumegenerator_missing_ids_query():
 
 
 def test_esfatgenerator():
+    """
+    old test for deprecated esfatgenerator, which is still used in esmarc
+    """
     expected_records = []
     for n in range(0, MAX):
         retrecord = deepcopy(default_returnrecord)
