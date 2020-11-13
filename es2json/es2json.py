@@ -36,8 +36,8 @@ class ESGenerator:
         :param source: Include the source field in your record, default is False
         :param excludes: don't include the fields defined by this parameter, optional
         :param includes: only include the fields defined by this parameter, optional
-        :param headless: don't include the metafields, only the data in the _source field
-        :param chunksize: pagesize to used
+        :param headless: don't include the metafields, only the data in the _source field, default is False
+        :param chunksize: pagesize to used, default is 1000
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
         :param verbose: print out progress information on /dev/stderr, default is True, optional
         :param size: only return the first n records or defined by a python slice
@@ -131,7 +131,7 @@ class ESGenerator:
                 searchslice = slice(0, int(self.size), 1)
             hits = s[searchslice].execute()
         else:
-            hits = s.params(scroll='12h').scan()
+            hits = s.params(scroll='12h', size=self.chunksize).scan()  # in scroll context, size = pagesize, still all records will be returned
         for n, hit in enumerate(hits):
             doc = self.return_doc(hit)
             if doc:
