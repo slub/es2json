@@ -125,7 +125,7 @@ class ESGenerator:
             doc = self.return_doc(hit)
             if doc:
                 yield doc
-            if self.verbose and (n+1) % self.chunksize == 0 or n+1 == hits_total:
+            if self.verbose and ((n+1) % self.chunksize == 0 or n+1 == hits_total):
                 helperscripts.eprint("{}/{}".format(n+1, hits_total))
 
 
