@@ -85,6 +85,9 @@ def run():
     else:
         tabbing = None
     kwargs_generator = dict(**vars(args))
+    for item in ("includes", "excludes"):  # str2list
+        if isinstance(kwargs_generator.get(item), str):
+            kwargs_generator[item] = kwargs_generator.pop(item).split(",")
     kwargs_generator.pop("server")
     kwargs_generator.pop("pretty")
     if args.idfile:

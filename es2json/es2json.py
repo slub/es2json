@@ -30,8 +30,8 @@ class ESGenerator:
         :param typ: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
         :param body: Query body to use for Elasticsearch, optional
         :param source: Include the source field in your record, default is False
-        :param excludes: don't include the fields defined by this parameter, optional
-        :param includes: only include the fields defined by this parameter, optional
+        :param excludes: don't include the fields defined by this parameter, optional, must be python list()
+        :param includes: only include the fields defined by this parameter, optional, must be python list()
         :param headless: don't include the metafields, only the data in the _source field, default is False
         :param chunksize: pagesize to used, default is 1000
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
@@ -122,9 +122,7 @@ class ESGenerator:
         else:
             hits = s.params(scroll='12h', size=self.chunksize).scan()  # in scroll context, size = pagesize, still all records will be returned
         for n, hit in enumerate(hits):
-            doc = self.return_doc(hit)
-            if doc:
-                yield doc
+            yield self.return_doc(hit)
             if self.verbose and ((n+1) % self.chunksize == 0 or n+1 == hits_total):
                 helperscripts.eprint("{}/{}".format(n+1, hits_total))
 
