@@ -51,7 +51,7 @@ def test_bullshit_user_input(**kwargs):
             assert record == {}
 
 
-def test_esgenerator(**kwargs):
+def test_esgenerator_own_esobj(**kwargs):
     """
     plain ESGenerator test, we test if we get back the full test-index
     """
@@ -78,11 +78,10 @@ def test_esgenerator(**kwargs):
         assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
 
-def test_esgenerator_own_esobj(**kwargs):
+def test_esgenerator(**kwargs):
     """
     plain ESGenerator test, we test if we get back the full test-index, but we use our own Elasticsearch.elasticsearch Object
     """
-    import elasticsearch
     expected_records = []
     for n, record in enumerate(testdata):
         retrecord = deepcopy(default_returnrecord)
