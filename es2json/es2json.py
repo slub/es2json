@@ -10,6 +10,7 @@ class ESGenerator:
     """
     def __init__(self, host='localhost',
                  port=9200,
+                 es=None,
                  index=None,
                  type=None,
                  id=None,
@@ -27,6 +28,7 @@ class ESGenerator:
         :param host: Elasticsearch host to use, default is localhost
         :param port: Elasticsearch port to use, default is 9200
         :param index: Elasticsearch Index to use, optional, if no parameter given, ESGenerator uses ALL the indices
+        :param es: Don't use the host/port/timeout setting, use your own elasticsearch.Elasticsearch() Object
         :param typ: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
         :param body: Query body to use for Elasticsearch, optional
         :param source: Include the source field in your record, default is False
@@ -39,14 +41,17 @@ class ESGenerator:
         :param size: only return records defined by a python slice() object
                      free earworm when working with python slices: https://youtu.be/Nlnoa67MUJU
         """
-        self.es = elasticsearch_dsl.connections.create_connection(**{
-                'host': host,
-                'port': port,
-                'timeout': timeout,
-                'max_retries': 10,
-                'retry_on_timeout': True,
-                'http_compress': True
-        })
+        if es:
+            self.es = es
+        else:
+            self.es = elasticsearch_dsl.connections.create_connection(**{
+                    'host': host,
+                    'port': port,
+                    'timeout': timeout,
+                    'max_retries': 10,
+                    'retry_on_timeout': True,
+                    'http_compress': True
+            })
         self.id = id
         self.source = source
         self.chunksize = chunksize

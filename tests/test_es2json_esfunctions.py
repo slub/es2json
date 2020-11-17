@@ -55,6 +55,34 @@ def test_esgenerator(**kwargs):
     """
     plain ESGenerator test, we test if we get back the full test-index
     """
+    import elasticsearch
+    es_kwargs = deepcopy(default_kwargs)
+    elastic = elasticsearch.Elasticsearch([{
+          'host': es_kwargs.pop("host"),
+          'port': es_kwargs.pop("port"),
+          'max_retries': 10,
+          'retry_on_timeout': True,
+          'http_compress': True
+        }])
+    expected_records = []
+    for n, record in enumerate(testdata):
+        retrecord = deepcopy(default_returnrecord)
+        retrecord["_source"] = record
+        retrecord["_id"] = str(n)
+        expected_records.append(dict(sorted(retrecord.items())))
+    for boolean in (True, False):
+        records = []
+        for n, record in enumerate(call_object(es2json.ESGenerator, use_with=boolean, es=elastic, **es_kwargs, **kwargs)):
+            record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
+            records.append(dict(sorted(record.items())))
+        assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
+
+
+def test_esgenerator_own_esobj(**kwargs):
+    """
+    plain ESGenerator test, we test if we get back the full test-index, but we use our own Elasticsearch.elasticsearch Object
+    """
+    import elasticsearch
     expected_records = []
     for n, record in enumerate(testdata):
         retrecord = deepcopy(default_returnrecord)
@@ -68,7 +96,7 @@ def test_esgenerator(**kwargs):
             records.append(dict(sorted(record.items())))
         assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
 
-
+    
 def test_esgenerator_get_document():
     """
     ESGenerator test, we test if we get a single record defined over a query, without the meta fields
