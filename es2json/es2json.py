@@ -1,7 +1,7 @@
 import os
 import elasticsearch
 import elasticsearch_dsl
-import helperscripts
+import es2json.helperscripts as helperscripts
 
 
 class ESGenerator:

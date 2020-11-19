@@ -3,7 +3,7 @@
 
 import argparse
 import json
-import helperscripts
+import es2json.helperscripts as helperscripts
 from es2json import ESGenerator
 from es2json import IDFile
 from es2json import IDFileConsume
