@@ -1,4 +1,5 @@
 import os
+import urllib
 import elasticsearch
 import elasticsearch_dsl
 import es2json.helperscripts as helperscripts
@@ -44,6 +45,8 @@ class ESGenerator:
         if es:
             self.es = es
         else:
+            if host.startswith("http"):
+                host = urllib.parse.urlparse(host).hostname
             self.es = elasticsearch_dsl.connections.create_connection(**{
                     'host': host,
                     'port': port,
