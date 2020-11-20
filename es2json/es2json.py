@@ -45,7 +45,7 @@ class ESGenerator:
         if es:
             self.es = es
         else:
-            if host.startswith("http"):
+            if "://" in host:  # we don't want the hostname to start with the protocoll
                 host = urllib.parse.urlparse(host).hostname
             self.es = elasticsearch_dsl.connections.create_connection(**{
                     'host': host,
