@@ -22,6 +22,8 @@ def run():
                         help='ElasticSearch Search Index to use')
     parser.add_argument('-type', type=str,
                         help='ElasticSearch Search Index Type to use')
+    parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
+                        "overwrites host/port/index/id/pretty")
     parser.add_argument('-source', type=helperscripts.str2bool, nargs='?',
                         const=True, default=True,
                         help='return the Document or just the Elasticsearch-Metadata')
@@ -40,8 +42,6 @@ def run():
         "-id", type=str, help="retrieve single document (optional)")
     parser.add_argument("-headless", action='store_true', default=False, help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=helperscripts.jsonstring_or_file, help='Searchbody')
-    parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
-                        "overwrites host/port/index/id/pretty")
     parser.add_argument(
         '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
