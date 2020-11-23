@@ -51,11 +51,10 @@ def run():
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
     args = parser.parse_args()
-    if args.server:
-        slashsplit = args.server.split("/")
+    if args.server:                                 # http://server.de:1234/index/_doc/101?pretty
+        slashsplit = args.server.split("/")         # → [http:, , server.de:1234, index, _doc, 101?pretty]
         args.host = slashsplit[2].rsplit(":")[0]
-        if helperscripts.isint(args.server.split(":")[2].rsplit("/")[0]):
-            args.port = args.server.split(":")[2].split("/")[0]
+        args.port = int(args.server.split(":")[2].rsplit("/")[0]) # raise Error if port not castable to int
         args.index = args.server.split("/")[3]
         if len(slashsplit) > 4:
             args.type = slashsplit[4]
