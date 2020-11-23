@@ -73,9 +73,9 @@ def run():
         if isinstance(args.size, int):  # oh, we got an single number, not a string with an number or even an string describing a slice
             args.size = str(args.size)
         if ':' in args.size:
-            args.size = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
+            args.slice = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
         else:
-            args.size = slice(0, int(args.size), 1)
+            args.slice = slice(0, int(args.size), 1)
     if args.headless and not args.source:
         helperscripts.eprint("ERROR! do not use -headless and -source False at the same Time!")
         exit(-1)
@@ -89,6 +89,7 @@ def run():
             kwargs_generator[item] = kwargs_generator.pop(item).split(",")
     kwargs_generator.pop("server")
     kwargs_generator.pop("pretty")
+    kwargs_generator.pop("size")           # translated to args.slice
     if args.idfile:
         ESGeneratorFunction = IDFile(**kwargs_generator).generator()
     elif args.idfile_consume:

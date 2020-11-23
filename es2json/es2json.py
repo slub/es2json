@@ -125,8 +125,8 @@ class ESGenerator:
             s = s.update_from_dict(self.body)
         if self.verbose:
             hits_total = s.count()
-        if self.size:
-            hits = s[self.size].execute()
+        if self.slice:
+            hits = s[self.slice].execute()
         else:
             hits = s.params(scroll='12h', size=self.chunksize).scan()  # in scroll context, size = pagesize, still all records will be returned
         for n, hit in enumerate(hits):
