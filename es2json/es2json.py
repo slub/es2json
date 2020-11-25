@@ -189,18 +189,27 @@ class IDFile(ESGenerator):
         missing = []  # an iterable containing missing ids
         while len(self.ids) > 0:
             if self.body:
-                for _id in self.ids[:self.chunksize]:
-                    s = elasticsearch_dsl.Search(using=self.es,
-                                                 index=self.index,
-                                                 doc_type=self.doc_type).source(excludes=self.source_excludes,
-                                                                                includes=self.source_includes).from_dict(self.body).query("match",
-                                                                                                                                          _id=_id)
-                    if s.count() > 0:  # we got our document
-                        for hit in s.execute():
-                            yield self.return_doc(hit)
-                    else:  # oh no, no results, we delete it from self.ids to prevent endless loops and add it to the missing ids iterable
-                        missing.append(_id)
+                ms = elasticsearch_dsl.MultiSearch(using=self.es, index=self.index, doc_type=self.doc_type)  # setting up MultiSearch
+                this_iter_ids = self.ids[:self.chunksize]  # an ID List per iteration, so we can check if all the IDs of this chunksize are found at the end.
+                for _id in this_iter_ids:  # add a search per ID
+                    ms = ms.add(elasticsearch_dsl.Search().source(excludes=self.source_excludes,
+                                                                  includes=self.source_includes).from_dict(self.body).query("match", _id=_id))
+                responses = ms.execute()
+                for response in responses:
+                    for hit in response:
+                        _id = hit.meta.to_dict()["id"]
+                        yield self.return_doc(hit)
+                        del self.ids[self.ids.index(_id)]
+                        del this_iter_ids[this_iter_ids.index(_id)]
+                for _id in this_iter_ids:
+                    """
+                    unfortunately MultiSearch doesn't throw an exception for non-Found-IDs, so we have manually check for missing ids
+                    so we again iterate over the helper_list with the IDs per chunk size (simply doing self.dis[:self.chunksize] would give us a new set)
+                    and we put all the IDs who are still in there in our missing list and delete them from self.ids and this_iter_ids
+                    """
+                    missing.append(_id)
                     del self.ids[self.ids.index(_id)]
+                    del this_iter_ids[this_iter_ids.index(_id)]
             else:
                 try:
                     s = elasticsearch_dsl.Document.mget(docs=self.ids[:self.chunksize],
