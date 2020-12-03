@@ -13,8 +13,8 @@ class ESGenerator:
                  port=9200,
                  es=None,
                  index=None,
-                 type=None,
-                 id=None,
+                 type_=None,
+                 id_=None,
                  body=None,
                  source=True,
                  excludes=None,
@@ -23,14 +23,14 @@ class ESGenerator:
                  chunksize=1000,
                  timeout=10,
                  verbose=True,
-                 size=None):
+                 slice_=None):
         """
         Construct a new ESGenerator Object.
         :param host: Elasticsearch host to use, default is localhost
         :param port: Elasticsearch port to use, default is 9200
         :param index: Elasticsearch Index to use, optional, if no parameter given, ESGenerator uses ALL the indices
         :param es: Don't use the host/port/timeout setting, use your own elasticsearch.Elasticsearch() Object
-        :param typ: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
+        :param type_: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
         :param body: Query body to use for Elasticsearch, optional
         :param source: Include the source field in your record, default is False
         :param excludes: don't include the fields defined by this parameter, optional, must be python list()
@@ -39,33 +39,29 @@ class ESGenerator:
         :param chunksize: pagesize to used, default is 1000
         :param timeout: Elasticsearch timeout parameter, default is 10 (seconds)
         :param verbose: print out progress information on /dev/stderr, default is True, optional
-        :param size: only return records defined by a python slice() object
-                     free earworm when working with python slices: https://youtu.be/Nlnoa67MUJU
+        :param slice_: only return records defined by a python slice() object
+                      free earworm when working with python slices: https://youtu.be/Nlnoa67MUJU
         """
         if es:
             self.es = es
         else:
             if "://" in host:  # we don't want the hostname to start with the protocoll
                 host = urllib.parse.urlparse(host).hostname
-            self.es = elasticsearch_dsl.connections.create_connection(**{
-                    'host': host,
-                    'port': port,
-                    'timeout': timeout,
-                    'max_retries': 10,
-                    'retry_on_timeout': True,
-                    'http_compress': True
-            })
-        self.id = id
+            self.es = elasticsearch_dsl.connections.create_connection(
+                               host=host, port=port, timeout=timeout,
+                               max_retries=10, retry_on_timeout=True,
+                               http_compress=True)
+        self.id_ = id_
         self.source = source
         self.chunksize = chunksize
         self.headless = headless
         self.index = index
-        self.doc_type = type
+        self.type_ = type_
         self.source_excludes = excludes
         self.source_includes = includes
         self.body = body
         self.verbose = verbose
-        self.size = size
+        self.slice_ = slice_
 
     def return_doc(self, hit):
         """
@@ -97,7 +93,7 @@ class ESGenerator:
         """
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, doc_, value, traceback):
         """
         function needed for with-statement
         since we don't need to do any cleanup, this function does nothing
@@ -108,10 +104,10 @@ class ESGenerator:
         """
         main generator function which harvests from the Elasticsearch-Cluster after all init and argument stuff is done
         """
-        if self.id:
+        if self.id_:
             s = elasticsearch_dsl.Document.get(using=self.es,
                                                index=self.index,
-                                               id=self.id,
+                                               id=self.id_,
                                                _source_excludes=self.source_excludes,
                                                _source_includes=self.source_includes,
                                                _source=self.source)
@@ -119,14 +115,14 @@ class ESGenerator:
             return
         s = elasticsearch_dsl.Search(using=self.es,
                                      index=self.index,
-                                     doc_type=self.doc_type).source(excludes=self.source_excludes,
+                                     doc_type=self.type_).source(excludes=self.source_excludes,
                                                                     includes=self.source_includes)
         if self.body:
             s = s.update_from_dict(self.body)
         if self.verbose:
             hits_total = s.count()
-        if self.slice:
-            hits = s[self.slice].execute()
+        if self.slice_:
+            hits = s[self.slice_].execute()
         else:
             hits = s.params(scroll='12h', size=self.chunksize).scan()  # in scroll context, size = pagesize, still all records will be returned
         for n, hit in enumerate(hits):
@@ -189,7 +185,7 @@ class IDFile(ESGenerator):
         missing = []  # an iterable containing missing ids
         while len(self.ids) > 0:
             if self.body:
-                ms = elasticsearch_dsl.MultiSearch(using=self.es, index=self.index, doc_type=self.doc_type)  # setting up MultiSearch
+                ms = elasticsearch_dsl.MultiSearch(using=self.es, index=self.index, doc_type=self.type_)  # setting up MultiSearch
                 this_iter_ids = self.ids[:self.chunksize]  # an ID List per iteration, so we can check if all the IDs of this chunksize are found at the end.
                 for _id in this_iter_ids:  # add a search per ID
                     ms = ms.add(elasticsearch_dsl.Search().source(excludes=self.source_excludes,

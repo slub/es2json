@@ -20,7 +20,7 @@ def run():
                         help='Port of the ElasticSearch-node to use, default: 9200.')
     parser.add_argument('-index', type=str,
                         help='ElasticSearch Search Index to use')
-    parser.add_argument('-type', type=str,
+    parser.add_argument('-type', type=str, dest="type_",
                         help='ElasticSearch Search Index Type to use')
     parser.add_argument('-server', type=str, help="use http://host:port/index/type/id?pretty. "
                         "overwrites host/port/index/id/pretty")

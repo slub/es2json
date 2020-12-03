@@ -12,7 +12,7 @@ default_kwargs = {
     "host": "localhost",
     "port": 9200,
     "index": "test",
-    "type": "_doc",
+    "type_": "_doc",
 }
 
 
@@ -103,7 +103,7 @@ def test_esgenerator_get_document():
     enter = False
     for boolean in (True, False):
         records = []
-        for record in call_object(es2json.ESGenerator, use_with=boolean, id=420, headless=True, **default_kwargs):
+        for record in call_object(es2json.ESGenerator, use_with=boolean, id_=420, headless=True, **default_kwargs):
             enter = True
             assert record == {"foo": 420, "bar": MAX-420, "baz": "test420"}
         assert enter  # testing if we even entered the generator() at all...useful for tests where we assert directly when iterating over the generator
@@ -123,7 +123,7 @@ def test_esgenerator_size(**kwargs):
         expected_records.append(dict(sorted(retrecord.items())))
     for boolean in (True, False):
         records = []
-        for record in call_object(es2json.ESGenerator, use_with=boolean, **default_kwargs, size=size, **kwargs):
+        for record in call_object(es2json.ESGenerator, use_with=boolean, **default_kwargs, slice_=size, **kwargs):
             #record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
         assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
@@ -143,7 +143,7 @@ def test_esgenerator_slice(**kwargs):
         expected_records.append(dict(sorted(retrecord.items())))
     for boolean in (True, False):
         records = []
-        for record in call_object(es2json.ESGenerator, use_with=boolean, size=slize, **default_kwargs, **kwargs):
+        for record in call_object(es2json.ESGenerator, use_with=boolean, slice_=slize, **default_kwargs, **kwargs):
             #record.pop("sort")  # different behaviour between es6 and es7 and tbh, we don't care about the sort parameter in this test
             records.append(dict(sorted(record.items())))
         assert sorted(expected_records, key=lambda k: k["_id"]) == sorted(records, key=lambda k: k["_id"])
