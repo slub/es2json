@@ -54,6 +54,12 @@ def run():
                         help="print progress for large dumps")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
+    parser.add_argument("-auth", type=str, nargs="?", const="ENV", metavar="USER",
+                        help='Provide authentication, this can be done using:\n'
+                        '1) set environment variables E2J_USER and E2J_PASSWD. In\n'
+                        '   this case there is no further argument needed here\n'
+                        '2) as a string "username". The password is then asked interactively\n'
+                        '3) as "username:password" (not recommended)')
     args = parser.parse_args()
 
     #parsing server                             # http://server.de:1234/index/_doc/101
@@ -66,6 +72,17 @@ def run():
         args.type_ = slashsplit[4]
     if len(slashsplit) > 5:
         args.id_ = slashsplit[5]
+
+    if args.auth:
+        raise NotImplementedError("authentication not yet implemented")
+        # args.pop("auth")
+        if args.auth == "ENV":
+            # check and use environmental username (E2J_USER) and password (E2J_PASSWD)
+            pass
+        else:
+            # parse authentication string: either "username" or "username:password"
+            pass
+
     if args.size:
         """
         we build the slice() object here, if this fails because of user input,
@@ -92,6 +109,7 @@ def run():
     kwargs_generator.pop("server")
     kwargs_generator.pop("pretty")
     kwargs_generator.pop("size")           # translated to args.slice
+    kwargs_generator.pop("auth")           # to be removed when implemented
     if args.idfile:
         ESGeneratorFunction = IDFile(**kwargs_generator).generator()
     elif args.idfile_consume:
