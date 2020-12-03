@@ -23,10 +23,9 @@ def run():
                         "type      - elasticsearch doctype to use (optional)\n"
                         "id        - identifier of one specific document to query (optional)",
                         default="http://127.0.0.1:9200")
-    parser.add_argument('-source', type=helperscripts.str2bool, nargs='?',
-                        const=True, default=True,
+    parser.add_argument('-source', action="store_true", default=True,
                         help='return the Document or just the Elasticsearch-Metadata')
-    parser.add_argument('-size', type=str, default=None,
+    parser.add_argument('-size', type=str, default=None, metavar="N[:M]",
                         help='just return the first n-Records of the search,\n'
                         'or return a python slice, e.g. 2:10 returns a list\n'
                         'from the 2nd including the 9th element of the search\n'
@@ -41,18 +40,22 @@ def run():
                         help="exclude following _source field(s) from the _source object")
     parser.add_argument("-headless", action='store_true', default=False,
                         help="don't print Elasticsearch metadata")
-    parser.add_argument('-body', type=helperscripts.jsonstring_or_file, help='Searchbody')
-    parser.add_argument(
-        '-idfile', type=str, help="path to a file with \\n-delimited IDs to process")
+    parser.add_argument('-body', type=helperscripts.jsonstring_or_file,
+                        help='Elasticsearch Query object that can be in the form of\n'
+                        '1) a JSON string (e.g. \'{"query": {"match": {"name": "foo"}}}\')\n'
+                        '2) a file containing the upper query string')
+    parser.add_argument('-idfile', type=str,
+                        help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-pretty', action='store_true', default=False,
                         help="prettyprint the json output")
-    parser.add_argument('-verbose', action='store_true', default=True,
+    parser.add_argument('-verbose', action='store_true', default=False,
                         help="print progress for large dumps")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
     args = parser.parse_args()
+
     #parsing server                             # http://server.de:1234/index/_doc/101
     slashsplit = args.server.split("/")         # → [http:, , server.de:1234, index, _doc, 101]
     args.host = slashsplit[2].rsplit(":")[0]
