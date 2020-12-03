@@ -32,7 +32,7 @@ class ESGenerator:
         :param es: Don't use the host/port/timeout setting, use your own elasticsearch.Elasticsearch() Object
         :param type_: Elasticsearch doc_type to use, optional, deprecated after Elasticsearch>=7.0.0
         :param body: Query body to use for Elasticsearch, optional
-        :param source: Include the source field in your record, default is False
+        :param source: Include the source field in your record, default is True
         :param excludes: don't include the fields defined by this parameter, optional, must be python list()
         :param includes: only include the fields defined by this parameter, optional, must be python list()
         :param headless: don't include the metafields, only the data in the _source field, default is False
@@ -73,17 +73,23 @@ class ESGenerator:
         meta = hit.meta.to_dict()
         if self.headless and not self.source:
             return {}
-        for key in elasticsearch_dsl.utils.META_FIELDS:
-            if key in meta:
-                meta["_{}".format(key)] = meta.pop(key)
-        if "doc_type" in meta:
-            meta["_type"] = meta.pop("doc_type")
-        meta["_source"] = {}
+
         if self.headless:
             return hit.to_dict()
         else:
+            # collect metadata fields and convert to fields
+            # starting with underscore ("_")
+            for key in elasticsearch_dsl.utils.META_FIELDS:
+                if key in meta:
+                    meta["_{}".format(key)] = meta.pop(key)
+            if "doc_type" in meta:
+                meta["_type"] = meta.pop("doc_type")
+
             if self.source:
                 meta["_source"] = hit.to_dict()
+            else:
+                meta["_source"] = {}     # @BH: necessarry?
+
             return meta
 
     def __enter__(self):
