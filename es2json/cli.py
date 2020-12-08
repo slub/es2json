@@ -61,17 +61,17 @@ def run():
                         '2) as a string "username". The password is then asked interactively\n'
                         '3) as "username:password" (not recommended)')
     args = parser.parse_args()
-
+    es_kwargs = {}                              # dict to collect kwargs for ESgenerator
     #parsing server                             # http://server.de:1234/index/_doc/101
     slashsplit = args.server.split("/")         # → [http:, , server.de:1234, index, _doc, 101]
-    args.host = slashsplit[2].rsplit(":")[0]
-    args.port = int(args.server.split(":")[2].rsplit("/")[0]) # raise Error if port not castable to int
+    es_kwargs["host"] = slashsplit[2].rsplit(":")[0]
+    es_kwargs["port"] = int(args.server.split(":")[2].rsplit("/")[0]) # raise Error if port not castable to int
     if len(slashsplit) > 3:
-        args.index = slashsplit[3]
+        es_kwargs["index"] = slashsplit[3]
     if len(slashsplit) > 4:
-        args.type_ = slashsplit[4]
+        es_kwargs["type_"] = slashsplit[4]
     if len(slashsplit) > 5:
-        args.id_ = slashsplit[5]
+        es_kwargs["id_"] = slashsplit[5]
 
     if args.auth:
         raise NotImplementedError("authentication not yet implemented")
@@ -92,33 +92,45 @@ def run():
         if isinstance(args.size, int):  # oh, we got an single number, not a string with an number or even an string describing a slice
             args.size = str(args.size)
         if ':' in args.size:
-            args.slice_ = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
+            es_kwargs["slice_"] = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
         else:
-            args.slice_ = slice(0, int(args.size), 1)
+            es_kwargs["slice_"] = slice(0, int(args.size), 1)
+
     if args.headless and args.ign_source:
         helperscripts.eprint("ERROR! do not use -headless and -ign-source at the same Time!")
         exit(-1)
+    else:
+        es_kwargs["headless"] = args.headless
+        es_kwargs["source"] = args.ign_source
+
     if args.pretty:
         tabbing = 4
     else:
         tabbing = None
-    kwargs_generator = dict(**vars(args))
-    for item in ("includes", "excludes"):  # str2list
-        if isinstance(kwargs_generator.get(item), str):
-            kwargs_generator[item] = kwargs_generator.pop(item).split(",")
-    kwargs_generator.pop("server")
-    kwargs_generator.pop("pretty")
-    kwargs_generator.pop("size")           # translated to args.slice
-    kwargs_generator.pop("auth")           # to be removed when implemented
+
+    if args.includes and isinstance(args.includes, str):
+        es_kwargs["includes"] = args.includes.split(",")
+    if args.excludes and isinstance(args.excludes, str):
+        es_kwargs["excludes"] = args.excludes.split(",")
+
+    if args.chunksize:
+        es_kwargs["chunksize"] = args.chunksize
+    if args.body:
+        es_kwargs["body"] = args.body
+    if args.timeout:
+        es_kwargs["timeout"] = args.timeout
+    if args.verbose:
+        es_kwargs["verbose"] = args.verbose
+
+
     if args.idfile:
-        ESGeneratorFunction = IDFile(**kwargs_generator).generator()
+        es_kwargs["idfile"] = args.idfile
+        ESGeneratorFunction = IDFile(**es_kwargs).generator()
     elif args.idfile_consume:
-        kwargs_generator["idfile"] = kwargs_generator.pop("idfile_consume")
-        ESGeneratorFunction = IDFileConsume(**kwargs_generator).generator()
+        es_kwargs["idfile"] = args.idfile_consume
+        ESGeneratorFunction = IDFileConsume(**es_kwargs).generator()
     else:
-        kwargs_generator.pop("idfile")
-        kwargs_generator.pop("idfile_consume")
-        ESGeneratorFunction = ESGenerator(**kwargs_generator).generator()
+        ESGeneratorFunction = ESGenerator(**es_kwargs).generator()
     for json_record in ESGeneratorFunction:
         print(json.dumps(json_record, indent=tabbing))
 
