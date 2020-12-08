@@ -38,7 +38,7 @@ def run():
                         help="just include following _source field(s) in the _source object")
     parser.add_argument("-excludes", type=str,
                         help="exclude following _source field(s) from the _source object")
-    parser.add_argument("-headless", action='store_true', default=False,
+    parser.add_argument("-headless", action='store_true',
                         help="don't print Elasticsearch metadata")
     parser.add_argument('-body', type=helperscripts.jsonstring_or_file,
                         help='Elasticsearch Query object that can be in the form of\n'
@@ -48,9 +48,9 @@ def run():
                         help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
-    parser.add_argument('-pretty', action='store_true', default=False,
+    parser.add_argument('-pretty', action='store_true',
                         help="prettyprint the json output")
-    parser.add_argument('-verbose', action='store_true', default=False,
+    parser.add_argument('-verbose', action='store_true',
                         help="print progress for large dumps")
     parser.add_argument('-chunksize', type=int, default=1000,
                         help="chunksize of the search window to use")
