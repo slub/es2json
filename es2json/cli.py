@@ -23,7 +23,7 @@ def run(argv=None):
                         "type      - elasticsearch doctype to use (optional)\n"
                         "id        - identifier of one specific document to query (optional)",
                         default="http://127.0.0.1:9200")
-    parser.add_argument('-ign-source', action="store_false",
+    parser.add_argument('-ign-source', action="store_true",
                         help='return the Document or just the Elasticsearch-Metadata')
     parser.add_argument('-size', type=str, default=None, metavar="N[:M]",
                         help='just return the first n-Records of the search,\n'
@@ -101,7 +101,7 @@ def run(argv=None):
         exit(-1)
     else:
         es_kwargs["headless"] = args.headless
-        es_kwargs["source"] = args.ign_source
+        es_kwargs["source"] = not args.ign_source
 
     if args.pretty:
         tabbing = 4
