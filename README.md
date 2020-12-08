@@ -4,7 +4,7 @@ es2json is a simple elasticsearch index download/search tool. You can use your o
 
 ## usage
 
-```bash
+```
 usage: es2json [-h] [-server SERVER] [-ign-source] [-size N[:M]]
                [-timeout TIMEOUT] [-includes INCLUDES] [-excludes EXCLUDES]
                [-headless] [-body BODY] [-idfile IDFILE]
