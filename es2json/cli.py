@@ -8,7 +8,7 @@ from es2json import ESGenerator
 from es2json import IDFile
 from es2json import IDFileConsume
 
-def run():
+def run(argv=None):
     """
     here We build a simple cmdline tool so we can use our classes from shell
     """
@@ -60,7 +60,7 @@ def run():
                         '   this case there is no further argument needed here\n'
                         '2) as a string "username". The password is then asked interactively\n'
                         '3) as "username:password" (not recommended)')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     es_kwargs = {}                              # dict to collect kwargs for ESgenerator
     #parsing server                             # http://server.de:1234/index/_doc/101
     slashsplit = args.server.split("/")         # → [http:, , server.de:1234, index, _doc, 101]
