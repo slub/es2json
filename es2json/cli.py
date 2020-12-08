@@ -23,7 +23,7 @@ def run():
                         "type      - elasticsearch doctype to use (optional)\n"
                         "id        - identifier of one specific document to query (optional)",
                         default="http://127.0.0.1:9200")
-    parser.add_argument('-source', action="store_true", default=True,
+    parser.add_argument('-ign-source', action="store_false",
                         help='return the Document or just the Elasticsearch-Metadata')
     parser.add_argument('-size', type=str, default=None, metavar="N[:M]",
                         help='just return the first n-Records of the search,\n'
@@ -95,8 +95,8 @@ def run():
             args.slice_ = slice(int(args.size.split(':')[0]), int(args.size.split(':')[1]), 1)
         else:
             args.slice_ = slice(0, int(args.size), 1)
-    if args.headless and not args.source:
-        helperscripts.eprint("ERROR! do not use -headless and -source False at the same Time!")
+    if args.headless and args.ign_source:
+        helperscripts.eprint("ERROR! do not use -headless and -ign-source at the same Time!")
         exit(-1)
     if args.pretty:
         tabbing = 4
