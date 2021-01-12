@@ -48,6 +48,9 @@ def run(argv=None):
                         help="path to a file with \\n-delimited IDs to process")
     parser.add_argument('-idfile_consume', type=str,
                         help="path to a file with \\n-delimited IDs to process")
+    parser.add_argument('-missing_behaviour', type=str, choices=['print', 'yield'], default='print',
+                        help="If IDs from an idfile are missing: 'print' or 'yield'\n"
+                        "and json dict containing the ID, default is 'print'")
     parser.add_argument('-pretty', action='store_true',
                         help="prettyprint the json output")
     parser.add_argument('-verbose', action='store_true',
@@ -121,8 +124,11 @@ def run(argv=None):
         es_kwargs["timeout"] = args.timeout
     if args.verbose:
         es_kwargs["verbose"] = args.verbose
-
-
+    if args.missing_behaviour and (args.idfile is None and args.idfile_consume is None):
+       helperscripts.eprint("ERROR! -missing_behaviour needs either -idfile or -idfile_consume")
+       exit(-1)
+    elif args.missing_behaviour:
+        es_kwargs["missing_behaviour"] = args.missing_behaviour
     if args.idfile:
         es_kwargs["idfile"] = args.idfile
         ESGeneratorFunction = IDFile(**es_kwargs).generator()

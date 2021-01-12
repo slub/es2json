@@ -143,14 +143,16 @@ class IDFile(ESGenerator):
     to reduce the searchwindow on
     """
     
-    def __init__(self,  idfile, **kwargs):
+    def __init__(self,  idfile, missing_behaviour='print', **kwargs):
         """
         Creates a new IDFile Object
         :param idfile: the path of the file containing the IDs or an iterable containing the IDs
+        :param missing_behaviour: What should we do with missing IDs? 'print' or 'yield' an dict containing the ID
         """
         super().__init__(**kwargs)
         self.idfile = idfile  # string containing the path to the idfile, or an iterable containing all the IDs
         self.ids = []  # an iterable containing all the IDs from idfile, going to be reduced during runtime
+        self.missing_behaviour = missing_behaviour # what to do with missing records? print or yield an dict containing the ID? default is print
         self.read_file()
 
     def read_file(self):
@@ -179,7 +181,10 @@ class IDFile(ESGenerator):
         error-print every missing ids
         """
         for item in missing:
-            helperscripts.eprint("ID {} not found".format(item))
+            if self.missing_behaviour == 'print':
+                helperscripts.eprint("ID {} not found".format(item))
+            elif self.missing_behaviour == 'yield':
+                yield {"_id": item, 'found': False}
 
     def generator(self):
         """
@@ -237,7 +242,8 @@ class IDFile(ESGenerator):
                 would throw an exception, since None isn't an iterable
                 """
                 self.ids = []
-        self.write_file(missing)
+        for item in self.write_file(missing):
+            yield item
 
 
 class IDFileConsume(IDFile):
@@ -269,5 +275,7 @@ class IDFileConsume(IDFile):
             with open(self.idfile, "w") as outp:
                 for item in missing:
                     print(item, file=outp)
+                    if self.missing_behaviour == 'yield':
+                        yield {"_id": item, 'found': False}
         else:  # no ids missing in the cluster? alright, we clean up
             os.remove(self.idfile)
