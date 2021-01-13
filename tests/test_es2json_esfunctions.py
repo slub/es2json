@@ -299,6 +299,43 @@ def test_eidfile_missing_ids():
         os.remove(fd)  # cleanup
 
 
+def test_eidfile_missing_ids_yield():
+    """
+    IDFile test, we test if we get the records, defined by an file containing ids
+    also the idfile contains IDs we don't have in our elasticsearch test index,
+    so we can check if es2json prints stderr of the IDs we couldn't find, which is the wished behaviour
+    """
+    for boolean in (True, False):
+        fd = str(uuid.uuid4())
+        expected_records = []
+        found_ids = set()
+        expected_missing = []
+        missing_ids = []
+        with open(fd, "w") as outp:
+            for n in range(MAX-100, MAX+200):
+                print(n, file=outp)
+                if n < MAX:
+                    retrecord = {}
+                    retrecord["foo"] = n
+                    retrecord["baz"] = "test{}".format(n)
+                    retrecord["bar"] = MAX-n
+                    expected_records.append(dict(sorted(retrecord.items())))
+                else:
+                    expected_missing.append(str(n))
+        records = []
+        enter = False
+        for record in call_object(es2json.IDFile, use_with=boolean, idfile=fd, headless=False, missing_behaviour='yield', **default_kwargs):
+            enter = True
+            if record.get("found") == False:
+                missing_ids.append(record["_id"])
+            else:
+                found_ids.add(record["_id"])
+                assert dict(sorted(record["_source"].items())) in expected_records
+        assert sorted(missing_ids) == sorted(expected_missing)
+        assert enter
+        os.remove(fd)  # cleanup
+
+
 def test_esidfileconsumegenerator():
     """
     IDFileConsume test, we test if we get the records, defined by an file containing ids, back and that file get's consumed (==deleted)
