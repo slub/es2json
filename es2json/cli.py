@@ -124,7 +124,7 @@ def run(argv=None):
         es_kwargs["timeout"] = args.timeout
     if args.verbose:
         es_kwargs["verbose"] = args.verbose
-    elif args.missing_behaviour:
+    if args.missing_behaviour and (args.idfile or args.idfile_consume):
         es_kwargs["missing_behaviour"] = args.missing_behaviour
     if args.idfile:
         es_kwargs["idfile"] = args.idfile
