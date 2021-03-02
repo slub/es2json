@@ -124,9 +124,6 @@ def run(argv=None):
         es_kwargs["timeout"] = args.timeout
     if args.verbose:
         es_kwargs["verbose"] = args.verbose
-    if args.missing_behaviour and (args.idfile is None and args.idfile_consume is None):
-       helperscripts.eprint("ERROR! -missing_behaviour needs either -idfile or -idfile_consume")
-       exit(-1)
     elif args.missing_behaviour:
         es_kwargs["missing_behaviour"] = args.missing_behaviour
     if args.idfile:
