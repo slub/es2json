@@ -1,3 +1,5 @@
+<img alt="EFRE-Lod logo" src="https://raw.githubusercontent.com/slub/data.slub-dresden.de/master/assets/images/EFRE_EU_quer_2015_rgb_engl.svg" width="300" >
+
 # es2jon
 
 es2json is a simple elasticsearch index download/search tool. You can use your own queries via the -body switch or give it an idfile with \n-delmited IDs. The idfile\_consume switch consumes the idfile, leaving back in the file just the IDs which couldnt get retrieved because of any reasons. Output is in line-delimited JSON over STDOUT, if you don't use -headless, elasticsearch metadata is getting printed out too.
