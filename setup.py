@@ -21,8 +21,8 @@ setup(name='es2json',
                    'cli': 'es2json'},
       install_requires=[
           'argparse>=1.4.0',
-          'elasticsearch>=6.0.0',
-          'elasticsearch_dsl>=6.0.0',
+          'elasticsearch>=7.0.0,<8.0.0',
+          'elasticsearch_dsl>=7.0.0,<8.0.0',
           'httplib2>=0.17.0'
       ],
       python_requires=">=3.5,<4",
